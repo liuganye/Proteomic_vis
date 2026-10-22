@@ -1,0 +1,28 @@
+# Python environments and local execution state
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# JavaScript dependencies and build outputs
+node_modules/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Local configuration; allow documented templates
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Re-generated analysis results; committed snapshots live elsewhere
+/reports/generated/
+
+# Local files
+.DS_Store
+Thumbs.db
+*.log
