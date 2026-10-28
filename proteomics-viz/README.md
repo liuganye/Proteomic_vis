@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:43147](http://127.0.0.1:43147).
+Open [http://localhost:43147](http://localhost:43147).
 
 Production build:
 
@@ -62,6 +62,14 @@ The Data input panel covers idle, loading, parse errors, and a ready summary (pr
 
 ## Caveats
 
-- Client-side only; large HYE tables (~9k × hundreds of columns) may be slow in-browser.
+- The original upload/mock QC and Downstream prototype is client-side; large tables may be slow in-browser. Real-data Explore uses the backend.
 - Approximation mode is not a substitute for FragPipe Analyst / limma DE.
-- Structure (PDB), sequence, PPI, and spatial modules from Plan G are out of scope for this slice.
+- The original prototype does not contain structure, sequence, or network modules; these are available in the separate Real data explore view described below.
+
+## Real-data end-to-end demo
+
+Start the backend using the repository data; see the [project setup guide](../README.md).
+
+In a second terminal, run `npm ci` and `npm run dev` from this frontend directory and open http://localhost:43147. Select **Real data explore**. It starts with O00148 (DDX39A), whose local structure is PDB 8IJU. Search for another protein or select a volcano point; selecting a node in the STRING network changes the same focus. Adjust the minimum confidence to filter edges and use the zoom controls to inspect the network. Neighbor-to-neighbor edges can be shown using the graph checkbox; it shows up to 29 neighbors and reports truncation. Nodes also support Enter and Space; the expandable neighbor list provides an alternative way to select them. The panel shows the existing Human − QC limma results, observed sample abundances, the local STRING neighborhood, sequence and available structure. Drag the structure to rotate; the canvas is a simplified Cα trace, not a full molecular viewer.
+
+The frontend calls `http://127.0.0.1:8000` by default. Set `NEXT_PUBLIC_PROTEIN_API` before starting Next.js if the API uses another origin. Configure `PROTEIN_CORS_ORIGINS` on the backend if the frontend uses a different origin. Backend startup reads the dataset before becoming ready. This is a focused integration slice: QC remains the separate upload/mock prototype, and the volcano does not yet support box selection or raw-p mode.

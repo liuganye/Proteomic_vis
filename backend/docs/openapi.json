@@ -1,0 +1,1438 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Protein Visualization API",
+    "description": "Read-only API over the supplied project dataset. No online statistical jobs.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dataset": {
+      "get": {
+        "tags": [
+          "dataset"
+        ],
+        "summary": "Dataset",
+        "operationId": "dataset_api_v1_dataset_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples": {
+      "get": {
+        "tags": [
+          "dataset"
+        ],
+        "summary": "Samples",
+        "operationId": "samples_api_v1_samples_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Sample"
+                  },
+                  "type": "array",
+                  "title": "Response Samples Api V1 Samples Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proteins": {
+      "get": {
+        "tags": [
+          "proteins"
+        ],
+        "summary": "Proteins",
+        "operationId": "proteins_api_v1_proteins_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "organism",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organism"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Protein_"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proteins/{protein_id}": {
+      "get": {
+        "tags": [
+          "proteins"
+        ],
+        "summary": "Protein",
+        "operationId": "protein_api_v1_proteins__protein_id__get",
+        "parameters": [
+          {
+            "name": "protein_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Protein Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProteinDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proteins/{protein_id}/abundance": {
+      "get": {
+        "tags": [
+          "proteins"
+        ],
+        "summary": "Abundance",
+        "operationId": "abundance_api_v1_proteins__protein_id__abundance_get",
+        "parameters": [
+          {
+            "name": "protein_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Protein Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbundanceResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contrasts": {
+      "get": {
+        "tags": [
+          "contrasts"
+        ],
+        "summary": "Contrasts",
+        "operationId": "contrasts_api_v1_contrasts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Contrast"
+                  },
+                  "type": "array",
+                  "title": "Response Contrasts Api V1 Contrasts Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contrasts/{contrast_id}/results": {
+      "get": {
+        "tags": [
+          "contrasts"
+        ],
+        "summary": "Results",
+        "operationId": "results_api_v1_contrasts__contrast_id__results_get",
+        "parameters": [
+          {
+            "name": "contrast_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Contrast Id"
+            }
+          },
+          {
+            "name": "organism",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organism"
+            }
+          },
+          {
+            "name": "p_value_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "adjusted",
+                "raw"
+              ],
+              "type": "string",
+              "default": "adjusted",
+              "title": "P Value Mode"
+            }
+          },
+          {
+            "name": "p_cutoff",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "exclusiveMinimum": 0,
+              "default": 0.05,
+              "title": "P Cutoff"
+            }
+          },
+          {
+            "name": "abs_log2_fc_cutoff",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0.7,
+              "title": "Abs Log2 Fc Cutoff"
+            }
+          },
+          {
+            "name": "significant_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Significant Only"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DifferentialPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/networks/{protein_id}/neighbors": {
+      "get": {
+        "tags": [
+          "networks"
+        ],
+        "summary": "Neighbors",
+        "operationId": "neighbors_api_v1_networks__protein_id__neighbors_get",
+        "parameters": [
+          {
+            "name": "protein_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Protein Id"
+            }
+          },
+          {
+            "name": "score_cutoff",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "minimum": 0,
+              "default": 0.4,
+              "title": "Score Cutoff"
+            }
+          },
+          {
+            "name": "max_nodes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 150,
+              "minimum": 1,
+              "default": 100,
+              "title": "Max Nodes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Neighborhood"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qc/samples": {
+      "get": {
+        "tags": [
+          "quality-control"
+        ],
+        "summary": "Samples",
+        "operationId": "samples_api_v1_qc_samples_get",
+        "parameters": [
+          {
+            "name": "organism",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organism"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QCResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/structures/{pdb_id}": {
+      "get": {
+        "tags": [
+          "structures"
+        ],
+        "summary": "Structure",
+        "operationId": "structure_api_v1_structures__pdb_id__get",
+        "parameters": [
+          {
+            "name": "pdb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{4}$",
+              "title": "Pdb Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AbundancePoint": {
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "title": "Sample Id"
+          },
+          "display_group": {
+            "type": "string",
+            "title": "Display Group"
+          },
+          "intensity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intensity"
+          },
+          "log2_intensity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log2 Intensity"
+          },
+          "observed": {
+            "type": "boolean",
+            "title": "Observed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sample_id",
+          "display_group",
+          "intensity",
+          "log2_intensity",
+          "observed"
+        ],
+        "title": "AbundancePoint"
+      },
+      "AbundanceResponse": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/AbundancePoint"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "missing_policy": {
+            "type": "string",
+            "title": "Missing Policy",
+            "default": "zero or blank -> null; no imputation in this response"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "points"
+        ],
+        "title": "AbundanceResponse"
+      },
+      "Contrast": {
+        "properties": {
+          "contrast_id": {
+            "type": "string",
+            "title": "Contrast Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "source_file": {
+            "type": "string",
+            "title": "Source File"
+          },
+          "evaluated_count": {
+            "type": "integer",
+            "title": "Evaluated Count"
+          },
+          "sample_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sample Ids"
+          },
+          "provenance": {
+            "type": "string",
+            "title": "Provenance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contrast_id",
+          "label",
+          "direction",
+          "method",
+          "source_file",
+          "evaluated_count",
+          "sample_ids",
+          "provenance"
+        ],
+        "title": "Contrast"
+      },
+      "DatasetSummary": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "protein_count": {
+            "type": "integer",
+            "title": "Protein Count"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count"
+          },
+          "differential_result_count": {
+            "type": "integer",
+            "title": "Differential Result Count"
+          },
+          "network_edge_count": {
+            "type": "integer",
+            "title": "Network Edge Count"
+          },
+          "local_structure_count": {
+            "type": "integer",
+            "title": "Local Structure Count"
+          },
+          "organism_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Organism Counts"
+          },
+          "source_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Files"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_count",
+          "sample_count",
+          "differential_result_count",
+          "network_edge_count",
+          "local_structure_count",
+          "organism_counts",
+          "source_files",
+          "warnings"
+        ],
+        "title": "DatasetSummary"
+      },
+      "DifferentialPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DifferentialResult"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "contrast_id": {
+            "type": "string",
+            "title": "Contrast Id"
+          },
+          "p_value_mode": {
+            "type": "string",
+            "enum": [
+              "adjusted",
+              "raw"
+            ],
+            "title": "P Value Mode"
+          },
+          "p_cutoff": {
+            "type": "number",
+            "title": "P Cutoff"
+          },
+          "abs_log2_fc_cutoff": {
+            "type": "number",
+            "title": "Abs Log2 Fc Cutoff"
+          },
+          "evaluated_count": {
+            "type": "integer",
+            "title": "Evaluated Count"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": "Filtering does not refit the model or recompute BH adjusted p-values."
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "contrast_id",
+          "p_value_mode",
+          "p_cutoff",
+          "abs_log2_fc_cutoff",
+          "evaluated_count"
+        ],
+        "title": "DifferentialPage"
+      },
+      "DifferentialResult": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "gene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene"
+          },
+          "organism": {
+            "type": "string",
+            "title": "Organism"
+          },
+          "log2_fc": {
+            "type": "number",
+            "title": "Log2 Fc"
+          },
+          "p_value": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "P Value"
+          },
+          "adj_p": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Adj P"
+          },
+          "significant": {
+            "type": "boolean",
+            "title": "Significant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "gene",
+          "organism",
+          "log2_fc",
+          "p_value",
+          "adj_p",
+          "significant"
+        ],
+        "title": "DifferentialResult"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Neighborhood": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Protein"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/NetworkEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "total_neighbors": {
+            "type": "integer",
+            "title": "Total Neighbors"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "STRING chunked network export; incomplete functional association graph"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": "Score is confidence, not binding strength. No model fitting is performed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "nodes",
+          "edges",
+          "total_neighbors",
+          "truncated"
+        ],
+        "title": "Neighborhood"
+      },
+      "NetworkEdge": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "species": {
+            "type": "integer",
+            "title": "Species"
+          },
+          "evidence": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "score",
+          "species",
+          "evidence"
+        ],
+        "title": "NetworkEdge"
+      },
+      "Page_Protein_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Protein"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "Page[Protein]"
+      },
+      "Protein": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "gene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene"
+          },
+          "organism": {
+            "type": "string",
+            "title": "Organism"
+          },
+          "taxon_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxon Id"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "gene",
+          "organism",
+          "taxon_id",
+          "length",
+          "description"
+        ],
+        "title": "Protein"
+      },
+      "ProteinDetail": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "gene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene"
+          },
+          "organism": {
+            "type": "string",
+            "title": "Organism"
+          },
+          "taxon_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxon Id"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations"
+          },
+          "structures": {
+            "items": {
+              "$ref": "#/components/schemas/StructureReference"
+            },
+            "type": "array",
+            "title": "Structures"
+          },
+          "structure_status": {
+            "type": "string",
+            "enum": [
+              "local_available",
+              "reference_only",
+              "no_pdb_reference"
+            ],
+            "title": "Structure Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "gene",
+          "organism",
+          "taxon_id",
+          "length",
+          "description",
+          "sequence",
+          "locations",
+          "structures",
+          "structure_status"
+        ],
+        "title": "ProteinDetail"
+      },
+      "QCResponse": {
+        "properties": {
+          "organism": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organism"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SampleQC"
+            },
+            "type": "array",
+            "title": "Samples"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": "Descriptive coverage only; pure-species and mixed samples are not graded together. Group labels and replicate types still require review."
+          }
+        },
+        "type": "object",
+        "required": [
+          "organism",
+          "samples"
+        ],
+        "title": "QCResponse"
+      },
+      "Sample": {
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "title": "Sample Id"
+          },
+          "original_condition": {
+            "type": "string",
+            "title": "Original Condition"
+          },
+          "display_group": {
+            "type": "string",
+            "title": "Display Group"
+          },
+          "group_review_status": {
+            "type": "string",
+            "const": "unreviewed",
+            "title": "Group Review Status",
+            "default": "unreviewed"
+          },
+          "replicate_label": {
+            "type": "string",
+            "title": "Replicate Label"
+          },
+          "replicate_type": {
+            "type": "null",
+            "title": "Replicate Type"
+          },
+          "source_file": {
+            "type": "string",
+            "title": "Source File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sample_id",
+          "original_condition",
+          "display_group",
+          "replicate_label",
+          "source_file"
+        ],
+        "title": "Sample"
+      },
+      "SampleQC": {
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "title": "Sample Id"
+          },
+          "display_group": {
+            "type": "string",
+            "title": "Display Group"
+          },
+          "detected_count": {
+            "type": "integer",
+            "title": "Detected Count"
+          },
+          "missing_count": {
+            "type": "integer",
+            "title": "Missing Count"
+          },
+          "protein_count": {
+            "type": "integer",
+            "title": "Protein Count"
+          },
+          "missing_fraction": {
+            "type": "number",
+            "title": "Missing Fraction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sample_id",
+          "display_group",
+          "detected_count",
+          "missing_count",
+          "protein_count",
+          "missing_fraction"
+        ],
+        "title": "SampleQC"
+      },
+      "StructureReference": {
+        "properties": {
+          "pdb_id": {
+            "type": "string",
+            "title": "Pdb Id"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "local_available": {
+            "type": "boolean",
+            "title": "Local Available"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pdb_id",
+          "source_url",
+          "local_available",
+          "download_url"
+        ],
+        "title": "StructureReference"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

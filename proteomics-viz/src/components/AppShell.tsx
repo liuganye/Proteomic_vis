@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RealExplore } from "./RealExplore";
 import { useDataset } from "@/hooks/use-dataset";
 import type {
   DownstreamModuleId,
@@ -51,6 +52,7 @@ const DOWNSTREAM_MODULES: {
 
 export function AppShell() {
   const { state, loadMock, loadFiles, clear } = useDataset();
+  const [realExplore, setRealExplore] = useState(true);
   const [section, setSection] = useState<SectionId>("qc");
   const [qcModule, setQcModule] = useState<QcModuleId>("missingness");
   const [dsModule, setDsModule] = useState<DownstreamModuleId>("volcano");
@@ -78,6 +80,7 @@ export function AppShell() {
           </div>
 
           <nav className="px-3 pb-4" aria-label="Sections">
+            <button type="button" onClick={() => setRealExplore(true)} className={`mb-3 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold ${realExplore ? "bg-teal-800 text-white" : "bg-slate-100 text-slate-700"}`}>Real data explore</button>
             <div className="mb-2 flex gap-1 rounded-lg bg-slate-100 p-1">
               {(
                 [
@@ -88,7 +91,7 @@ export function AppShell() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setSection(id)}
+                  onClick={() => { setSection(id); setRealExplore(false); }}
                   className={
                     section === id
                       ? "flex-1 rounded-md bg-white px-2 py-1.5 text-sm font-semibold text-teal-900 shadow-sm"
@@ -108,6 +111,7 @@ export function AppShell() {
                     <button
                       type="button"
                       onClick={() => {
+                        setRealExplore(false);
                         if (section === "qc") setQcModule(m.id as QcModuleId);
                         else setDsModule(m.id as DownstreamModuleId);
                       }}
@@ -134,6 +138,7 @@ export function AppShell() {
         </aside>
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          {realExplore ? <RealExplore /> : <>
           <FileUploadPanel
             state={state}
             onLoadMock={loadMock}
@@ -169,6 +174,7 @@ export function AppShell() {
             This app reimplements FragPipe Analyst–style structure in JS; it is
             not a fork of the Shiny source.
           </footer>
+          </>}
         </main>
       </div>
     </div>
