@@ -47,8 +47,9 @@ export function ResultsTable({ points, contrastLabel }: Props) {
 
       {points.length === 0 ? (
         <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
-          No DE results to show. Open the Volcano module first or load a table
-          with log2FC + adjusted p-value columns.
+          No DE results for this contrast. Choose two different groups, or load
+          a table with matching log2FC + adjusted p-value columns (or MaxLFQ
+          intensities for both groups).
         </p>
       ) : (
         <>

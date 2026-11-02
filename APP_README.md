@@ -48,20 +48,20 @@ Upload those files via the Data input panel (the browser cannot read host paths 
 
 #### Conventional plots (FragPipe Analyst–style)
 
-1. **Missingness** — % proteins with MaxLFQ = 0 per sample (colored by condition)
-2. **Intensity** — log₁₀ MaxLFQ histogram + per-sample quartile table
-3. **Correlation** — pairwise Pearson matrix on log₁₀ MaxLFQ (sample similarity overview)
+1. **Missingness** — % proteins with MaxLFQ = 0 per sample (ordered/colored by every annotation group)
+2. **Intensity** — log₁₀ MaxLFQ histogram + per-group summary + per-sample quartile table
+3. **Correlation** — pairwise Pearson matrix on log₁₀ MaxLFQ, samples ordered by annotation group
 
 #### Custom plots
 
-1. **Median vs missingness** — scatter of median log₁₀ MaxLFQ vs % missing per sample (flags high-missing / low-median outliers)
+1. **Median vs missingness** — scatter of median log₁₀ MaxLFQ vs % missing per sample, colored by all annotation groups
 
 ### Downstream
 
-1. **Volcano** — Human vs QC when contrast columns or annotation conditions are present; adjustable |log2FC| and adj.P thresholds
+1. **Volcano** — pick any two annotation groups (defaults to Human vs QC when present); uses limma columns when available, else MaxLFQ-mean approx; adjustable |log2FC| and adj.P thresholds
 2. **Results table** — ranked by adjusted p-value, filterable, paginated
 
-If adjusted p-value columns are missing but Human/QC annotation exists, Downstream can show an **approximate** MaxLFQ-mean volcano (demo only — not limma).
+If adjusted p-value columns are missing for the selected pair, Downstream shows an **approximate** MaxLFQ-mean volcano (demo only — not limma). QC plots color and summarize **all** condition/group labels from the annotation.
 
 ## Empty / loading / error
 

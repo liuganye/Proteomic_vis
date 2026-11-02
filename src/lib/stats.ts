@@ -6,6 +6,129 @@ import type {
   VolcanoPoint,
 } from "./types";
 
+/** Distinct hues for arbitrary annotation groups (Human/QC keep familiar colors). */
+const CONDITION_PALETTE = [
+  "#0f766e", // teal
+  "#b45309", // amber
+  "#1d4ed8", // blue
+  "#be185d", // pink
+  "#7c3aed", // violet
+  "#047857", // green
+  "#c2410c", // orange
+  "#0e7490", // cyan
+  "#a16207", // yellow-brown
+  "#475569", // slate
+];
+
+const PREFERRED_CONDITION_COLORS: Record<string, string> = {
+  human: "#0f766e",
+  qc: "#b45309",
+};
+
+/** Stable color map for every condition/group label present. */
+export function buildConditionColorMap(conditions: string[]): Record<string, string> {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const c of conditions) {
+    const g = (c ?? "").trim() || "Unknown";
+    if (seen.has(g)) continue;
+    seen.add(g);
+    unique.push(g);
+  }
+  const map: Record<string, string> = { Unknown: "#64748b" };
+  let paletteIdx = 0;
+  for (const g of unique) {
+    const preferred = PREFERRED_CONDITION_COLORS[g.toLowerCase()];
+    if (preferred) {
+      map[g] = preferred;
+      continue;
+    }
+    // skip palette slots that match preferred hues already used
+    while (
+      paletteIdx < CONDITION_PALETTE.length &&
+      Object.values(map).includes(CONDITION_PALETTE[paletteIdx])
+    ) {
+      paletteIdx += 1;
+    }
+    map[g] =
+      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#64748b";
+    paletteIdx += 1;
+  }
+  return map;
+}
+
+export function conditionColor(
+  condition: string,
+  colorMap: Record<string, string>,
+): string {
+  const g = (condition ?? "").trim() || "Unknown";
+  return colorMap[g] ?? colorMap.Unknown ?? "#64748b";
+}
+
+/** Order samples by condition (annotation order), then sample name. */
+export function samplesOrderedByCondition(dataset: FragPipeDataset): string[] {
+  const cond = conditionMap(dataset.annotation);
+  const groupOrder = annotationGroups(dataset);
+  const rank = new Map(groupOrder.map((g, i) => [g, i]));
+  return [...dataset.samples].sort((a, b) => {
+    const ca = cond.get(a) ?? "Unknown";
+    const cb = cond.get(b) ?? "Unknown";
+    const ra = rank.has(ca) ? rank.get(ca)! : 999;
+    const rb = rank.has(cb) ? rank.get(cb)! : 999;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
+}
+
+/** Per-group QC aggregates for summary + intensity table. */
+export function groupQcStats(
+  miss: ReturnType<typeof missingnessBySample>,
+  boxes: ReturnType<typeof intensityBoxBySample>,
+): {
+  condition: string;
+  nSamples: number;
+  meanMissingPct: number;
+  medianOfMedians: number;
+  samples: string[];
+}[] {
+  const boxBy = new Map(boxes.map((b) => [b.sample, b]));
+  const byCond = new Map<string, typeof miss>();
+  for (const m of miss) {
+    const list = byCond.get(m.condition) ?? [];
+    list.push(m);
+    byCond.set(m.condition, list);
+  }
+  // Preserve first-seen condition order from miss (already condition-sorted)
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const m of miss) {
+    if (seen.has(m.condition)) continue;
+    seen.add(m.condition);
+    order.push(m.condition);
+  }
+  return order.map((condition) => {
+    const rows = byCond.get(condition) ?? [];
+    const meanMissingPct =
+      rows.length === 0
+        ? 0
+        : (rows.reduce((s, r) => s + r.missingFraction, 0) / rows.length) * 100;
+    const medians = rows
+      .map((r) => boxBy.get(r.sample)?.median)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    const medianOfMedians =
+      medians.length === 0
+        ? 0
+        : medians.reduce((a, b) => a + b, 0) / medians.length;
+    return {
+      condition,
+      nSamples: rows.length,
+      meanMissingPct: Math.round(meanMissingPct * 10) / 10,
+      medianOfMedians,
+      samples: rows.map((r) => r.sample),
+    };
+  });
+}
+
 export function missingnessBySample(dataset: FragPipeDataset): {
   sample: string;
   condition: string;
@@ -15,7 +138,8 @@ export function missingnessBySample(dataset: FragPipeDataset): {
 }[] {
   const cond = conditionMap(dataset.annotation);
   const n = dataset.proteins.length;
-  return dataset.samples.map((sample) => {
+  const samples = samplesOrderedByCondition(dataset);
+  return samples.map((sample) => {
     let missing = 0;
     for (const p of dataset.proteins) {
       const v = p.maxlfq[sample] ?? 0;
@@ -76,16 +200,17 @@ export function intensityBoxBySample(dataset: FragPipeDataset): {
 }[] {
   // Per-sample accumulation — avoid materializing the full protein×sample long table.
   const cond = conditionMap(dataset.annotation);
+  const samples = samplesOrderedByCondition(dataset);
   const bySample = new Map<string, number[]>();
-  for (const sample of dataset.samples) bySample.set(sample, []);
+  for (const sample of samples) bySample.set(sample, []);
   for (const p of dataset.proteins) {
-    for (const sample of dataset.samples) {
+    for (const sample of samples) {
       const raw = p.maxlfq[sample] ?? 0;
       if (raw <= 0 || !Number.isFinite(raw)) continue;
       bySample.get(sample)!.push(Math.log10(raw));
     }
   }
-  return dataset.samples.map((sample) => {
+  return samples.map((sample) => {
     const vals = (bySample.get(sample) ?? []).sort((a, b) => a - b);
     return {
       sample,
@@ -149,8 +274,12 @@ export function pearson(a: number[], b: number[]): number {
 export function sampleCorrelationMatrix(dataset: FragPipeDataset): {
   samples: string[];
   matrix: number[][];
+  /** Parallel to samples — condition/group from annotation */
+  conditions: string[];
 } {
-  const samples = dataset.samples;
+  const samples = samplesOrderedByCondition(dataset);
+  const cond = conditionMap(dataset.annotation);
+  const conditions = samples.map((s) => cond.get(s) ?? "Unknown");
   const vectors = samples.map((sample) =>
     dataset.proteins.map((p) => {
       const v = p.maxlfq[sample] ?? 0;
@@ -174,13 +303,77 @@ export function sampleCorrelationMatrix(dataset: FragPipeDataset): {
       return pearson(a, b);
     }),
   );
-  return { samples, matrix };
+  return { samples, matrix, conditions };
 }
 
 function conditionMap(annotation: ExperimentAnnotation[]) {
   const m = new Map<string, string>();
   for (const a of annotation) m.set(a.sample, a.condition);
   return m;
+}
+
+/** Unique condition/group labels from experiment_annotation (stable order). */
+export function annotationGroups(dataset: FragPipeDataset): string[] {
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const a of dataset.annotation) {
+    const g = (a.condition ?? "").trim();
+    if (!g || seen.has(g)) continue;
+    seen.add(g);
+    groups.push(g);
+  }
+  return groups;
+}
+
+/** Prefer Human vs QC when both exist; otherwise the first two groups. */
+export function defaultGroupPair(groups: string[]): {
+  groupA: string;
+  groupB: string;
+} {
+  const find = (re: RegExp) => groups.find((g) => re.test(g));
+  const human = find(/^human$/i);
+  const qc = find(/^qc$/i);
+  if (human && qc) return { groupA: human, groupB: qc };
+  if (groups.length >= 2) return { groupA: groups[0], groupB: groups[1] };
+  return { groupA: groups[0] ?? "", groupB: "" };
+}
+
+function normalizeContrastToken(s: string): string {
+  return s.trim().toLowerCase().replace(/[_\s-]+/g, "");
+}
+
+/**
+ * Match a FragPipe limma contrast column to groupA vs groupB.
+ * Returns the contrast key and whether log2FC must be flipped (B_vs_A found).
+ */
+export function matchLimmaContrast(
+  contrasts: string[],
+  groupA: string,
+  groupB: string,
+): { contrast: string; flip: boolean } | null {
+  if (!groupA || !groupB || groupA === groupB) return null;
+  const a = normalizeContrastToken(groupA);
+  const b = normalizeContrastToken(groupB);
+  for (const c of contrasts) {
+    const parts = c.split(/\s*_vs_\s*|\s+vs\s+/i);
+    if (parts.length !== 2) continue;
+    const left = normalizeContrastToken(parts[0]);
+    const right = normalizeContrastToken(parts[1]);
+    if (left === a && right === b) return { contrast: c, flip: false };
+    if (left === b && right === a) return { contrast: c, flip: true };
+  }
+  // Fallback: loose "human…qc" style substring match for legacy labels
+  const loose = contrasts.find((c) => {
+    const n = normalizeContrastToken(c);
+    return n.includes(a) && n.includes(b) && a !== b;
+  });
+  if (loose) {
+    const n = normalizeContrastToken(loose);
+    const ai = n.indexOf(a);
+    const bi = n.indexOf(b);
+    return { contrast: loose, flip: ai > bi };
+  }
+  return null;
 }
 
 export function preferHumanVsQcContrast(contrasts: string[]): string | null {
@@ -194,15 +387,22 @@ export function preferHumanVsQcContrast(contrasts: string[]): string | null {
 export function buildVolcano(
   dataset: FragPipeDataset,
   contrast: string,
-  opts?: { log2fcThreshold?: number; adjPThreshold?: number },
+  opts?: {
+    log2fcThreshold?: number;
+    adjPThreshold?: number;
+    /** Multiply log2FC by -1 when the stored contrast is reversed */
+    flipLog2fc?: boolean;
+  },
 ): VolcanoPoint[] {
   const fcThr = opts?.log2fcThreshold ?? 1;
   const pThr = opts?.adjPThreshold ?? 0.05;
+  const flip = opts?.flipLog2fc ? -1 : 1;
   const points: VolcanoPoint[] = [];
   for (const p of dataset.proteins) {
-    const log2fc = p.log2fc[contrast];
+    const rawFc = p.log2fc[contrast];
     const adjP = p.adjP[contrast];
-    if (log2fc === undefined || adjP === undefined) continue;
+    if (rawFc === undefined || adjP === undefined) continue;
+    const log2fc = rawFc * flip;
     if (!Number.isFinite(log2fc) || !Number.isFinite(adjP) || adjP <= 0)
       continue;
     const significant = Math.abs(log2fc) >= fcThr && adjP <= pThr;
@@ -224,35 +424,46 @@ export function buildVolcano(
   return points;
 }
 
-/** When no adj-p columns exist, approximate Human vs QC from MaxLFQ means. */
-export function approximateHumanVsQc(
-  dataset: FragPipeDataset,
-): { contrast: string; points: VolcanoPoint[] } | null {
-  const human = dataset.annotation
-    .filter((a) => /human/i.test(a.condition))
+function samplesForGroup(dataset: FragPipeDataset, group: string): string[] {
+  const want = group.trim().toLowerCase();
+  return dataset.annotation
+    .filter((a) => a.condition.trim().toLowerCase() === want)
     .map((a) => a.sample)
     .filter((s) => dataset.samples.includes(s));
-  const qc = dataset.annotation
-    .filter((a) => /^qc$/i.test(a.condition) || /\bqc\b/i.test(a.condition))
-    .map((a) => a.sample)
-    .filter((s) => dataset.samples.includes(s));
-  if (human.length === 0 || qc.length === 0) return null;
+}
 
+/**
+ * Approximate DE for any two annotation groups from MaxLFQ group means
+ * (demo only when limma adj-p columns are absent for that contrast).
+ */
+export function approximateGroupContrast(
+  dataset: FragPipeDataset,
+  groupA: string,
+  groupB: string,
+  opts?: { log2fcThreshold?: number; adjPThreshold?: number },
+): { contrast: string; points: VolcanoPoint[] } | null {
+  if (!groupA || !groupB || groupA === groupB) return null;
+  const aSamples = samplesForGroup(dataset, groupA);
+  const bSamples = samplesForGroup(dataset, groupB);
+  if (aSamples.length === 0 || bSamples.length === 0) return null;
+
+  const fcThr = opts?.log2fcThreshold ?? 1;
+  const pThr = opts?.adjPThreshold ?? 0.05;
   const points: VolcanoPoint[] = [];
   for (const p of dataset.proteins) {
-    const hVals = human.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
-    const qVals = qc.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
-    if (hVals.length === 0 || qVals.length === 0) continue;
-    const hMean = hVals.reduce((a, b) => a + b, 0) / hVals.length;
-    const qMean = qVals.reduce((a, b) => a + b, 0) / qVals.length;
-    const log2fc = Math.log2((hMean + 1) / (qMean + 1));
+    const aVals = aSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
+    const bVals = bSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
+    if (aVals.length === 0 || bVals.length === 0) continue;
+    const aMean = aVals.reduce((x, y) => x + y, 0) / aVals.length;
+    const bMean = bVals.reduce((x, y) => x + y, 0) / bVals.length;
+    const log2fc = Math.log2((aMean + 1) / (bMean + 1));
     const t = Math.abs(log2fc) / 0.4;
     // Deterministic pseudo-p from effect size (demo only; not a real DE test)
     const adjP = Math.min(
       1,
       Math.max(1e-12, Math.exp(-0.5 * t * t)),
     );
-    const significant = Math.abs(log2fc) >= 1 && adjP <= 0.05;
+    const significant = Math.abs(log2fc) >= fcThr && adjP <= pThr;
     points.push({
       proteinId: p.proteinId,
       gene: p.gene || p.proteinId,
@@ -263,7 +474,76 @@ export function approximateHumanVsQc(
       direction: !significant ? "ns" : log2fc > 0 ? "up" : "down",
     });
   }
-  return { contrast: "Human_vs_QC (approx from MaxLFQ)", points };
+  return {
+    contrast: `${groupA}_vs_${groupB} (approx from MaxLFQ)`,
+    points,
+  };
+}
+
+/** @deprecated Prefer approximateGroupContrast(dataset, "Human", "QC") */
+export function approximateHumanVsQc(
+  dataset: FragPipeDataset,
+): { contrast: string; points: VolcanoPoint[] } | null {
+  const groups = annotationGroups(dataset);
+  const human = groups.find((g) => /^human$/i.test(g));
+  const qc = groups.find((g) => /^qc$/i.test(g));
+  if (!human || !qc) return null;
+  return approximateGroupContrast(dataset, human, qc);
+}
+
+/**
+ * Build volcano points for a selected group pair: reuse limma columns when
+ * present, otherwise MaxLFQ group-mean approximation.
+ */
+export function volcanoForGroups(
+  dataset: FragPipeDataset,
+  groupA: string,
+  groupB: string,
+  opts?: { log2fcThreshold?: number; adjPThreshold?: number },
+): {
+  points: VolcanoPoint[];
+  contrastLabel: string;
+  approximated: boolean;
+  ready: boolean;
+} {
+  const canCompare = Boolean(groupA && groupB && groupA !== groupB);
+  if (!canCompare) {
+    return {
+      points: [],
+      contrastLabel: "—",
+      approximated: false,
+      ready: false,
+    };
+  }
+  const matched = matchLimmaContrast(dataset.contrasts, groupA, groupB);
+  if (matched) {
+    return {
+      points: buildVolcano(dataset, matched.contrast, {
+        ...opts,
+        flipLog2fc: matched.flip,
+      }),
+      contrastLabel: matched.flip
+        ? `${groupA} vs ${groupB} (from ${matched.contrast}, FC flipped)`
+        : matched.contrast,
+      approximated: false,
+      ready: true,
+    };
+  }
+  const approx = approximateGroupContrast(dataset, groupA, groupB, opts);
+  if (!approx) {
+    return {
+      points: [],
+      contrastLabel: `${groupA} vs ${groupB}`,
+      approximated: true,
+      ready: true,
+    };
+  }
+  return {
+    points: approx.points,
+    contrastLabel: approx.contrast,
+    approximated: true,
+    ready: true,
+  };
 }
 
 export function resultsTableRows(
@@ -312,13 +592,16 @@ export function computeQcBundle(dataset: FragPipeDataset) {
   const boxes = intensityBoxBySample(dataset);
   const correlation = sampleCorrelationMatrix(dataset);
   const scatter = medianVsMissingnessFrom(miss, boxes);
+  const groups = groupQcStats(miss, boxes);
+  const colorMap = buildConditionColorMap(groups.map((g) => g.condition));
   const conclusions = buildQcConclusionsFrom({
     miss,
     boxes,
     correlation,
     scatter,
+    groups,
   });
-  return { miss, boxes, correlation, scatter, conclusions };
+  return { miss, boxes, correlation, scatter, groups, colorMap, conclusions };
 }
 
 function medianVsMissingnessFrom(
@@ -347,9 +630,10 @@ function buildQcConclusionsFrom(parts: {
   boxes: ReturnType<typeof intensityBoxBySample>;
   correlation: ReturnType<typeof sampleCorrelationMatrix>;
   scatter: ReturnType<typeof medianVsMissingnessFrom>;
+  groups: ReturnType<typeof groupQcStats>;
 }): QcConclusion[] {
   const conclusions: QcConclusion[] = [];
-  const { miss, boxes, correlation, scatter } = parts;
+  const { miss, boxes, correlation, scatter, groups } = parts;
   const { samples, matrix } = correlation;
 
   if (miss.length === 0) {
@@ -363,6 +647,27 @@ function buildQcConclusionsFrom(parts: {
       group: "conventional",
     });
     return conclusions;
+  }
+
+  if (groups.length > 0) {
+    const groupList = groups
+      .map(
+        (g) =>
+          `${g.condition} (n=${g.nSamples}, mean missing ${g.meanMissingPct.toFixed(1)}%)`,
+      )
+      .join("; ");
+    conclusions.push({
+      id: "groups-overview",
+      severity: "info",
+      title:
+        groups.length === 1
+          ? `One annotation group: ${groups[0].condition}`
+          : `${groups.length} annotation groups in experiment_annotation`,
+      detail: groupList,
+      plotId: "missingness",
+      plotLabel: "Missingness",
+      group: "conventional",
+    });
   }
 
   const sortedMiss = [...miss].sort(

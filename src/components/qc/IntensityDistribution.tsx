@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -9,7 +10,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { intensityBoxBySample, intensityLong } from "@/lib/stats";
+import {
+  buildConditionColorMap,
+  conditionColor,
+  groupQcStats,
+  intensityBoxBySample,
+  intensityLong,
+  missingnessBySample,
+} from "@/lib/stats";
 import type { FragPipeDataset } from "@/lib/types";
 
 type BoxRow = ReturnType<typeof intensityBoxBySample>[number];
@@ -36,13 +44,23 @@ function buildHistogram(values: number[], bins = 30) {
 export function IntensityDistribution({
   dataset,
   boxes: precomputedBoxes,
+  groups: precomputedGroups,
+  colorMap: colorMapProp,
 }: {
   dataset: FragPipeDataset;
   boxes?: BoxRow[];
+  groups?: ReturnType<typeof groupQcStats>;
+  colorMap?: Record<string, string>;
 }) {
   const long = intensityLong(dataset, { log10: true, maxPoints: 20000 });
   const hist = buildHistogram(long.map((d) => d.value));
   const boxes = precomputedBoxes ?? intensityBoxBySample(dataset);
+  const groups = useMemo(() => {
+    if (precomputedGroups) return precomputedGroups;
+    return groupQcStats(missingnessBySample(dataset), boxes);
+  }, [precomputedGroups, dataset, boxes]);
+  const colorMap =
+    colorMapProp ?? buildConditionColorMap(groups.map((g) => g.condition));
 
   return (
     <div className="space-y-8">
@@ -85,11 +103,60 @@ export function IntensityDistribution({
       <div>
         <header className="mb-3">
           <h3 className="text-lg font-semibold text-slate-900">
+            Per-group intensity summary
+          </h3>
+          <p className="text-sm text-slate-600">
+            Mean missingness and mean of per-sample median log<sub>10</sub>{" "}
+            MaxLFQ for every condition/group in the annotation (
+            {groups.length} group{groups.length === 1 ? "" : "s"}).
+          </p>
+        </header>
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Group</th>
+                <th className="px-3 py-2">n samples</th>
+                <th className="px-3 py-2">Mean missing %</th>
+                <th className="px-3 py-2">Mean median log₁₀</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <tr key={g.condition} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-sm"
+                        style={{
+                          background: conditionColor(g.condition, colorMap),
+                        }}
+                      />
+                      {g.condition}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">{g.nSamples}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {g.meanMissingPct.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {g.medianOfMedians.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <header className="mb-3">
+          <h3 className="text-lg font-semibold text-slate-900">
             Per-sample log<sub>10</sub> MaxLFQ summary
           </h3>
           <p className="text-sm text-slate-600">
             Quartile summary (min / Q1 / median / Q3 / max) of positive MaxLFQ
-            values per sample.
+            values per sample, ordered by annotation group.
           </p>
         </header>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -110,7 +177,17 @@ export function IntensityDistribution({
                   <td className="px-3 py-2 font-medium text-slate-900">
                     {b.sample}
                   </td>
-                  <td className="px-3 py-2 text-slate-700">{b.condition}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-sm"
+                        style={{
+                          background: conditionColor(b.condition, colorMap),
+                        }}
+                      />
+                      {b.condition}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 tabular-nums">{b.n}</td>
                   <td className="px-3 py-2 tabular-nums">
                     {b.median.toFixed(2)}

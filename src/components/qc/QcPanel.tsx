@@ -80,8 +80,8 @@ export function QcPanel({
                 Conventional plots
               </h2>
               <p className="text-sm text-slate-600">
-                Standard FragPipe Analyst–style QC: missingness, intensity
-                distribution, and sample correlation.
+                Standard FragPipe Analyst–style QC across all annotation groups:
+                missingness, intensity distribution, and sample correlation.
               </p>
             </div>
 
@@ -89,14 +89,23 @@ export function QcPanel({
               anchorId={PLOT_ANCHOR.missingness}
               highlighted={highlight === "missingness"}
             >
-              <MissingnessPlot dataset={dataset} rows={bundle.miss} />
+              <MissingnessPlot
+                dataset={dataset}
+                rows={bundle.miss}
+                colorMap={bundle.colorMap}
+              />
             </PlotCard>
 
             <PlotCard
               anchorId={PLOT_ANCHOR.intensity}
               highlighted={highlight === "intensity"}
             >
-              <IntensityDistribution dataset={dataset} boxes={bundle.boxes} />
+              <IntensityDistribution
+                dataset={dataset}
+                boxes={bundle.boxes}
+                groups={bundle.groups}
+                colorMap={bundle.colorMap}
+              />
             </PlotCard>
 
             <PlotCard
@@ -106,6 +115,7 @@ export function QcPanel({
               <SampleCorrelation
                 dataset={dataset}
                 matrix={bundle.correlation}
+                colorMap={bundle.colorMap}
               />
             </PlotCard>
           </section>
@@ -128,7 +138,11 @@ export function QcPanel({
               highlighted={highlight === "median-vs-missing"}
               tone="custom"
             >
-              <MedianVsMissingness dataset={dataset} rows={bundle.scatter} />
+              <MedianVsMissingness
+                dataset={dataset}
+                rows={bundle.scatter}
+                colorMap={bundle.colorMap}
+              />
             </PlotCard>
           </section>
         </>

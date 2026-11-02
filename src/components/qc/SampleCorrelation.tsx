@@ -1,6 +1,11 @@
 "use client";
 
-import { sampleCorrelationMatrix } from "@/lib/stats";
+import { useMemo } from "react";
+import {
+  buildConditionColorMap,
+  conditionColor,
+  sampleCorrelationMatrix,
+} from "@/lib/stats";
 import type { FragPipeDataset } from "@/lib/types";
 
 function colorForR(r: number): string {
@@ -15,11 +20,25 @@ function colorForR(r: number): string {
 export function SampleCorrelation({
   dataset,
   matrix: precomputed,
+  colorMap: colorMapProp,
 }: {
   dataset: FragPipeDataset;
   matrix?: ReturnType<typeof sampleCorrelationMatrix>;
+  colorMap?: Record<string, string>;
 }) {
-  const { samples, matrix } = precomputed ?? sampleCorrelationMatrix(dataset);
+  const { samples, matrix, conditions } =
+    precomputed ?? sampleCorrelationMatrix(dataset);
+  const groups = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of conditions) {
+      if (seen.has(c)) continue;
+      seen.add(c);
+      out.push(c);
+    }
+    return out;
+  }, [conditions]);
+  const colorMap = colorMapProp ?? buildConditionColorMap(groups);
 
   return (
     <div>
@@ -29,22 +48,38 @@ export function SampleCorrelation({
         </h3>
         <p className="text-sm text-slate-600">
           Pairwise Pearson correlation of log<sub>10</sub>(MaxLFQ) across
-          proteins (pairwise-complete; zeros excluded). A PCA-style overview of
-          sample similarity without a full dimension-reduction stack.
+          proteins (pairwise-complete; zeros excluded). Samples are ordered by
+          annotation group so within-group blocks sit on the diagonal.
         </p>
       </header>
+
+      <ul className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600">
+        {groups.map((g) => (
+          <li key={g} className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ background: conditionColor(g, colorMap) }}
+            />
+            {g}
+          </li>
+        ))}
+      </ul>
 
       <div className="overflow-x-auto">
         <table className="border-collapse text-xs">
           <thead>
             <tr>
               <th className="p-1" />
-              {samples.map((s) => (
+              {samples.map((s, i) => (
                 <th
                   key={s}
-                  className="max-w-[4.5rem] truncate p-1 font-medium text-slate-600"
-                  title={s}
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                  className="max-w-[4.5rem] truncate p-1 font-medium"
+                  title={`${s} (${conditions[i]})`}
+                  style={{
+                    writingMode: "vertical-rl",
+                    transform: "rotate(180deg)",
+                    color: conditionColor(conditions[i], colorMap),
+                  }}
                 >
                   {s}
                 </th>
@@ -54,8 +89,20 @@ export function SampleCorrelation({
           <tbody>
             {samples.map((row, i) => (
               <tr key={row}>
-                <th className="whitespace-nowrap pr-2 text-right font-medium text-slate-700">
-                  {row}
+                <th
+                  className="whitespace-nowrap pr-2 text-right font-medium"
+                  title={`${row} (${conditions[i]})`}
+                  style={{ color: conditionColor(conditions[i], colorMap) }}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{
+                        background: conditionColor(conditions[i], colorMap),
+                      }}
+                    />
+                    {row}
+                  </span>
                 </th>
                 {samples.map((col, j) => {
                   const r = matrix[i][j];
@@ -64,7 +111,7 @@ export function SampleCorrelation({
                       <div
                         className="flex h-10 w-10 items-center justify-center rounded-sm text-[10px] font-medium text-white"
                         style={{ background: colorForR(r) }}
-                        title={`${row} × ${col}: ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
+                        title={`${row} (${conditions[i]}) × ${col} (${conditions[j]}): ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
                       >
                         {Number.isFinite(r) ? r.toFixed(2) : "—"}
                       </div>
@@ -77,7 +124,8 @@ export function SampleCorrelation({
         </table>
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        Color scale: lower r → amber, higher r → teal. Diagonal is 1.00.
+        Color scale: lower r → amber, higher r → teal. Diagonal is 1.00. Axis
+        labels use annotation-group colors.
       </p>
     </div>
   );

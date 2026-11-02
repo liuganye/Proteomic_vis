@@ -46,12 +46,12 @@ const DOWNSTREAM_MODULES: {
   {
     id: "volcano",
     label: "Volcano",
-    blurb: "Human vs QC DE overview",
+    blurb: "Pick two groups to compare",
   },
   {
     id: "results",
     label: "Results table",
-    blurb: "Ranked adj.P / log2FC",
+    blurb: "Ranked adj.P / log2FC for contrast",
   },
 ];
 
