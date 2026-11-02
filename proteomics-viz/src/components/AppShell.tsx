@@ -1,35 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { RealExplore } from "./RealExplore";
+import { useState, type ReactNode } from "react";
 import { useDataset } from "@/hooks/use-dataset";
 import type {
   DownstreamModuleId,
-  ModuleId,
-  QcModuleId,
+  QcPlotId,
   SectionId,
 } from "@/lib/types";
 import { DownstreamPanel } from "./downstream/DownstreamPanel";
 import { FileUploadPanel } from "./FileUploadPanel";
-import { IntensityDistribution } from "./qc/IntensityDistribution";
-import { MissingnessPlot } from "./qc/MissingnessPlot";
-import { SampleCorrelation } from "./qc/SampleCorrelation";
+import { QcPanel } from "./qc/QcPanel";
 
-const QC_MODULES: { id: QcModuleId; label: string; blurb: string }[] = [
+const QC_NAV: { id: QcPlotId; label: string; blurb: string; group: "conventional" | "custom" }[] = [
   {
     id: "missingness",
     label: "Missingness",
     blurb: "Zero MaxLFQ rate by sample",
+    group: "conventional",
   },
   {
     id: "intensity",
     label: "Intensity",
     blurb: "log10 MaxLFQ distributions",
+    group: "conventional",
   },
   {
     id: "correlation",
     label: "Correlation",
     blurb: "Sample–sample Pearson matrix",
+    group: "conventional",
+  },
+  {
+    id: "median-vs-missing",
+    label: "Median vs missing",
+    blurb: "Custom: median × % missing",
+    group: "custom",
   },
 ];
 
@@ -52,15 +57,16 @@ const DOWNSTREAM_MODULES: {
 
 export function AppShell() {
   const { state, loadMock, loadFiles, clear } = useDataset();
-  const [realExplore, setRealExplore] = useState(true);
   const [section, setSection] = useState<SectionId>("qc");
-  const [qcModule, setQcModule] = useState<QcModuleId>("missingness");
+  const [qcFocus, setQcFocus] = useState<QcPlotId | null>(null);
+  const [qcFocusToken, setQcFocusToken] = useState(0);
   const [dsModule, setDsModule] = useState<DownstreamModuleId>("volcano");
 
-  const activeModule: ModuleId =
-    section === "qc" ? qcModule : dsModule;
-
-  const modules = section === "qc" ? QC_MODULES : DOWNSTREAM_MODULES;
+  const jumpQc = (id: QcPlotId) => {
+    setSection("qc");
+    setQcFocus(id);
+    setQcFocusToken((t) => t + 1);
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_#ecfdf5_0%,_#f8fafc_45%,_#f1f5f9_100%)] text-slate-900">
@@ -74,13 +80,12 @@ export function AppShell() {
               FragPipe-style analyst
             </h1>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              QC + downstream modules over MaxLFQ and annotation tables — first
-              slice inspired by FragPipe Analyst flow.
+              QC summary → jump to plots, plus downstream modules over MaxLFQ
+              and annotation tables.
             </p>
           </div>
 
           <nav className="px-3 pb-4" aria-label="Sections">
-            <button type="button" onClick={() => setRealExplore(true)} className={`mb-3 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold ${realExplore ? "bg-teal-800 text-white" : "bg-slate-100 text-slate-700"}`}>Real data explore</button>
             <div className="mb-2 flex gap-1 rounded-lg bg-slate-100 p-1">
               {(
                 [
@@ -91,7 +96,7 @@ export function AppShell() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => { setSection(id); setRealExplore(false); }}
+                  onClick={() => setSection(id)}
                   className={
                     section === id
                       ? "flex-1 rounded-md bg-white px-2 py-1.5 text-sm font-semibold text-teal-900 shadow-sm"
@@ -103,42 +108,64 @@ export function AppShell() {
               ))}
             </div>
 
-            <ul className="space-y-1">
-              {modules.map((m) => {
-                const selected = activeModule === m.id;
-                return (
+            {section === "qc" ? (
+              <div className="space-y-3">
+                <NavGroup label="Summary">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSection("qc");
+                      document
+                        .getElementById("qc-summary")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    <div className="font-medium">QC conclusions</div>
+                    <div className="text-slate-500">Click items → jump to plots</div>
+                  </button>
+                </NavGroup>
+                <NavGroup label="Conventional">
+                  {QC_NAV.filter((m) => m.group === "conventional").map((m) => (
+                    <NavButton
+                      key={m.id}
+                      label={m.label}
+                      blurb={m.blurb}
+                      selected={section === "qc" && qcFocus === m.id}
+                      onClick={() => jumpQc(m.id)}
+                    />
+                  ))}
+                </NavGroup>
+                <NavGroup label="Custom">
+                  {QC_NAV.filter((m) => m.group === "custom").map((m) => (
+                    <NavButton
+                      key={m.id}
+                      label={m.label}
+                      blurb={m.blurb}
+                      selected={section === "qc" && qcFocus === m.id}
+                      onClick={() => jumpQc(m.id)}
+                    />
+                  ))}
+                </NavGroup>
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {DOWNSTREAM_MODULES.map((m) => (
                   <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRealExplore(false);
-                        if (section === "qc") setQcModule(m.id as QcModuleId);
-                        else setDsModule(m.id as DownstreamModuleId);
-                      }}
-                      className={
-                        selected
-                          ? "w-full rounded-lg bg-teal-800 px-3 py-2 text-left text-sm text-white"
-                          : "w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
-                      }
-                    >
-                      <div className="font-medium">{m.label}</div>
-                      <div
-                        className={
-                          selected ? "text-teal-100" : "text-slate-500"
-                        }
-                      >
-                        {m.blurb}
-                      </div>
-                    </button>
+                    <NavButton
+                      label={m.label}
+                      blurb={m.blurb}
+                      selected={dsModule === m.id}
+                      onClick={() => setDsModule(m.id)}
+                    />
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
           </nav>
         </aside>
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          {realExplore ? <RealExplore /> : <>
           <FileUploadPanel
             state={state}
             onLoadMock={loadMock}
@@ -146,38 +173,93 @@ export function AppShell() {
             onClear={clear}
           />
 
-          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <section className="mt-6">
             {state.status !== "ready" || !state.dataset ? (
-              <EmptyAnalysis section={section} moduleLabel={
-                modules.find((m) => m.id === activeModule)?.label ?? ""
-              } />
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <EmptyAnalysis
+                  section={section}
+                  moduleLabel={
+                    section === "qc"
+                      ? "QC summary + plots"
+                      : (DOWNSTREAM_MODULES.find((m) => m.id === dsModule)
+                          ?.label ?? "")
+                  }
+                />
+              </div>
             ) : section === "qc" ? (
-              qcModule === "missingness" ? (
-                <MissingnessPlot dataset={state.dataset} />
-              ) : qcModule === "intensity" ? (
-                <IntensityDistribution dataset={state.dataset} />
-              ) : (
-                <SampleCorrelation dataset={state.dataset} />
-              )
+              <QcPanel
+                dataset={state.dataset}
+                focusPlotId={qcFocus}
+                focusToken={qcFocusToken}
+              />
             ) : (
-              <DownstreamPanel dataset={state.dataset} module={dsModule} />
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <DownstreamPanel dataset={state.dataset} module={dsModule} />
+              </div>
             )}
           </section>
 
           <footer className="mt-8 pb-6 text-xs text-slate-500">
-            Optional omics data path:{" "}
+            Optional omics / Mac data path:{" "}
+            <code className="rounded bg-white/80 px-1">
+              ~/Protein_visualization
+            </code>{" "}
+            or{" "}
             <code className="rounded bg-white/80 px-1">
               /data/ganye/Protein_visualization/
             </code>{" "}
             — upload <code>combined_protein.tsv</code> and{" "}
-            <code>experiment_annotation.tsv</code> from there when available.
-            This app reimplements FragPipe Analyst–style structure in JS; it is
-            not a fork of the Shiny source.
+            <code>experiment_annotation.tsv</code>. This app reimplements
+            FragPipe Analyst–style structure in JS; it is not a fork of the Shiny
+            source.
           </footer>
-          </>}
         </main>
       </div>
     </div>
+  );
+}
+
+function NavGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <p className="mb-1 px-3 text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
+        {label}
+      </p>
+      <ul className="space-y-1">{children}</ul>
+    </div>
+  );
+}
+
+function NavButton({
+  label,
+  blurb,
+  selected,
+  onClick,
+}: {
+  label: string;
+  blurb: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        selected
+          ? "w-full rounded-lg bg-teal-800 px-3 py-2 text-left text-sm text-white"
+          : "w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+      }
+    >
+      <div className="font-medium">{label}</div>
+      <div className={selected ? "text-teal-100" : "text-slate-500"}>{blurb}</div>
+    </button>
   );
 }
 
