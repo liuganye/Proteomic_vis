@@ -1,0 +1,26 @@
+png,csv_source,description
+ga1_maxlfq_log10_hist.png,data/processed/maxlfq_long.csv,log10 MaxLFQ histogram
+ga1_maxlfq_missingness_by_sample.png,data/processed/maxlfq_wide.csv,per-sample MaxLFQ missingness
+ga1_maxlfq_boxplot_samples.png,data/processed/maxlfq_long.csv,log10 MaxLFQ boxplots by sample
+ga3_pdb_coverage.png,data/processed/structure_pdb_index.csv,PDB hit vs no pdb avaliable + xref counts
+ga5_ppi_degree_and_scores.png,data/processed/ppi_string_edges.csv,PPI degree + edge score histograms
+ga5_ppi_network_neighborhood.png,data/processed/ppi_string_edges.csv,STRING neighborhood network sketch
+ga6_spatial_location_bar.png,data/processed/spatial_mapping.csv,top subcellular location bar chart
+ga2_volcano_human_vs_qc_pvalue.png,data/processed/ga2_human_vs_qc_limma.csv (+ data/raw/experiment_annotation.tsv),Human vs QC limma volcano (-log10 p)
+ga2_volcano_human_vs_qc_adj_p.png,data/processed/ga2_human_vs_qc_limma.csv (+ data/raw/experiment_annotation.tsv),Human vs QC limma volcano (-log10 BH adj-p)
+structure_3d/4CVH_front.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,4CVH front cartoon
+structure_3d/4CVH_back.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,4CVH back cartoon
+structure_3d/4CVH_side.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,4CVH side cartoon
+structure_3d/4CVH_top.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,4CVH top cartoon
+structure_3d/6MW7_front.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,6MW7 front cartoon
+structure_3d/6MW7_back.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,6MW7 back cartoon
+structure_3d/6MW7_side.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,6MW7 side cartoon
+structure_3d/6MW7_top.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,6MW7 top cartoon
+structure_3d/8IJU_front.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,8IJU front cartoon
+structure_3d/8IJU_back.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,8IJU back cartoon
+structure_3d/8IJU_side.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,8IJU side cartoon
+structure_3d/8IJU_top.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,8IJU top cartoon
+structure_3d/2QQ2_front.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,2QQ2 front cartoon
+structure_3d/2QQ2_back.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,2QQ2 back cartoon
+structure_3d/2QQ2_side.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,2QQ2 side cartoon
+structure_3d/2QQ2_top.png,data/processed/structure_pdb_index.csv → PDB file → PyMOL,2QQ2 top cartoon

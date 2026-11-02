@@ -1,0 +1,5 @@
+Protein ID,pdb_id,front,back,side,top,pdb_file
+A4D126,4CVH,reports/figures/structure_3d/4CVH_front.png,reports/figures/structure_3d/4CVH_back.png,reports/figures/structure_3d/4CVH_side.png,reports/figures/structure_3d/4CVH_top.png,data/external/pdb_files/pdb4cvh.ent
+A6NHR9,6MW7,reports/figures/structure_3d/6MW7_front.png,reports/figures/structure_3d/6MW7_back.png,reports/figures/structure_3d/6MW7_side.png,reports/figures/structure_3d/6MW7_top.png,data/external/pdb_files/pdb6mw7.ent
+O00148,8IJU,reports/figures/structure_3d/8IJU_front.png,reports/figures/structure_3d/8IJU_back.png,reports/figures/structure_3d/8IJU_side.png,reports/figures/structure_3d/8IJU_top.png,data/external/pdb_files/pdb8iju.ent
+O00154,2QQ2,reports/figures/structure_3d/2QQ2_front.png,reports/figures/structure_3d/2QQ2_back.png,reports/figures/structure_3d/2QQ2_side.png,reports/figures/structure_3d/2QQ2_top.png,data/external/pdb_files/pdb2qq2.ent
