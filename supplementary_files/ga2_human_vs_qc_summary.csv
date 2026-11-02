@@ -1,0 +1,10 @@
+,value
+n_proteins_plotted,4375
+n_human_samples,3
+n_qc_samples,12
+human_samples,"Human_4,Human_5,Human_6"
+qc_samples,"QC_10,QC_11,QC_12,QC_13,QC_14,QC_15,QC_16,QC_17,QC_18,QC_7,QC_8,QC_9"
+n_sig_adj_p_0.05_fc_0.7,33
+quant,MaxLFQ Intensity
+contrast,Human - QC
+method,limma eBayes + BH (FragPipe-Analyst)

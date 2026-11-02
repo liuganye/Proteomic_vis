@@ -1,0 +1,10 @@
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+jupyter>=1.0
+ipykernel>=6.0
+matplotlib>=3.7
+seaborn>=0.13
+networkx>=3.0
+biopython>=1.83
+pymol-open-source>=3.0

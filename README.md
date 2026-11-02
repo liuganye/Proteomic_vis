@@ -4,7 +4,8 @@ A local, read-only demonstration for exploring a fixed proteomics dataset. Searc
 
 ## Contents
 
-- `proteomics-viz/`: Next.js frontend; includes the real-data Explore view and the earlier upload/mock QC prototype.
+- Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes upload/mock QC (summary→jump, Conventional/Custom) and RealExplore.
+- `supplementary_files/`: Plan G notebook, CSVs/TSVs, and plots.
 - `backend/`: FastAPI service, tests, and OpenAPI contract.
 - `data/raw/`: original protein table and sample annotation.
 - `data/processed/`: existing abundance, differential results, sequence, location, network and structure indexes.
@@ -28,7 +29,6 @@ py -3 -m venv .venv
 In the second, from the repository root:
 
 ```powershell
-cd proteomics-viz
 npm ci
 npm run dev
 ```
@@ -49,7 +49,6 @@ python3 -m venv .venv
 Second terminal, from the repository root:
 
 ```sh
-cd proteomics-viz
 npm ci
 npm run dev
 ```
@@ -65,7 +64,7 @@ Open <http://localhost:43147>. Windows was used for the validation described bel
 
 ## Verification
 
-From `backend/`, use the venv Python to run `python -m protein_viz.cli validate-data`, `python -m pytest -q` and `python -m ruff check src tests` (on Windows, replace `python` with `.\.venv\Scripts\python.exe`; on macOS/Linux use `.venv/bin/python`). From `proteomics-viz/`, run `npm run build`.
+From `backend/`, use the venv Python to run `python -m protein_viz.cli validate-data`, `python -m pytest -q` and `python -m ruff check src tests` (on Windows, replace `python` with `.\.venv\Scripts\python.exe`; on macOS/Linux use `.venv/bin/python`). From the repository root, run `npm run build`.
 
 The data check should report 9,369 proteins, 45 samples, 4,375 differential results, and four locally available structures. At adjusted p < 0.05 and |log2FC| > 0.7, the imported Human − QC result has 33 significant proteins. These are checks of the included snapshot, not a reanalysis.
 
