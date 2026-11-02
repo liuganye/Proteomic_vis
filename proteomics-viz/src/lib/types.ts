@@ -1,9 +1,37 @@
 export type SectionId = "qc" | "downstream";
 
-export type QcModuleId = "missingness" | "intensity" | "correlation";
+/** Conventional FragPipe Analyst–style QC plots */
+export type QcConventionalPlotId =
+  | "missingness"
+  | "intensity"
+  | "correlation";
+
+/** Project-specific / extra QC plots */
+export type QcCustomPlotId = "median-vs-missing";
+
+export type QcPlotId = QcConventionalPlotId | QcCustomPlotId;
+
+/** @deprecated Prefer QcPlotId; kept for nav compatibility */
+export type QcModuleId = QcPlotId;
+
 export type DownstreamModuleId = "volcano" | "results";
 
 export type ModuleId = QcModuleId | DownstreamModuleId;
+
+export type QcConclusionSeverity = "ok" | "info" | "warn" | "critical";
+
+export interface QcConclusion {
+  id: string;
+  severity: QcConclusionSeverity;
+  /** Short headline shown in the summary list */
+  title: string;
+  /** One-sentence clear conclusion */
+  detail: string;
+  /** Plot section to scroll/focus when clicked */
+  plotId: QcPlotId;
+  plotLabel: string;
+  group: "conventional" | "custom";
+}
 
 export interface ExperimentAnnotation {
   file: string;

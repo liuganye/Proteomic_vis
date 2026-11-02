@@ -45,9 +45,17 @@ Upload those files via the Data input panel (the browser cannot read host paths 
 
 ### QC
 
+**Summary first:** a clickable conclusions panel sits above the plots. Each conclusion jumps/scrolls to the graph that illustrates it (highlight ring on focus).
+
+#### Conventional plots (FragPipe Analyst–style)
+
 1. **Missingness** — % proteins with MaxLFQ = 0 per sample (colored by condition)
 2. **Intensity** — log₁₀ MaxLFQ histogram + per-sample quartile table
 3. **Correlation** — pairwise Pearson matrix on log₁₀ MaxLFQ (sample similarity overview)
+
+#### Custom plots
+
+1. **Median vs missingness** — scatter of median log₁₀ MaxLFQ vs % missing per sample (flags high-missing / low-median outliers)
 
 ### Downstream
 
