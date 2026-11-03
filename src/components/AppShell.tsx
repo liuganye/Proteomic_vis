@@ -2,10 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { useDataset } from "@/hooks/use-dataset";
+import { autoTitle } from "@/lib/custom-plot-metrics";
 import type {
   DownstreamModuleId,
   QcPlotId,
   SectionId,
+  UserCustomPlotSpec,
 } from "@/lib/types";
 import { DownstreamPanel } from "./downstream/DownstreamPanel";
 import { FileUploadPanel } from "./FileUploadPanel";
@@ -61,11 +63,30 @@ export function AppShell() {
   const [qcFocus, setQcFocus] = useState<QcPlotId | null>(null);
   const [qcFocusToken, setQcFocusToken] = useState(0);
   const [dsModule, setDsModule] = useState<DownstreamModuleId>("volcano");
+  const [userCustomPlots, setUserCustomPlots] = useState<UserCustomPlotSpec[]>(
+    [],
+  );
 
   const jumpQc = (id: QcPlotId) => {
     setSection("qc");
     setQcFocus(id);
     setQcFocusToken((t) => t + 1);
+  };
+
+  const handleClear = () => {
+    clear();
+    setUserCustomPlots([]);
+    setQcFocus(null);
+  };
+
+  const addUserPlot = (spec: UserCustomPlotSpec) => {
+    setUserCustomPlots((prev) => [...prev, spec]);
+    jumpQc(spec.id);
+  };
+
+  const removeUserPlot = (id: string) => {
+    setUserCustomPlots((prev) => prev.filter((p) => p.id !== id));
+    setQcFocus((cur) => (cur === id ? null : cur));
   };
 
   return (
@@ -146,6 +167,15 @@ export function AppShell() {
                       onClick={() => jumpQc(m.id)}
                     />
                   ))}
+                  {userCustomPlots.map((p) => (
+                    <NavButton
+                      key={p.id}
+                      label={p.title || autoTitle(p)}
+                      blurb={`User ${p.kind}`}
+                      selected={section === "qc" && qcFocus === p.id}
+                      onClick={() => jumpQc(p.id)}
+                    />
+                  ))}
                 </NavGroup>
               </div>
             ) : (
@@ -170,7 +200,7 @@ export function AppShell() {
             state={state}
             onLoadMock={loadMock}
             onLoadFiles={loadFiles}
-            onClear={clear}
+            onClear={handleClear}
           />
 
           <section className="mt-6">
@@ -191,6 +221,9 @@ export function AppShell() {
                 dataset={state.dataset}
                 focusPlotId={qcFocus}
                 focusToken={qcFocusToken}
+                userCustomPlots={userCustomPlots}
+                onAddUserPlot={addUserPlot}
+                onRemoveUserPlot={removeUserPlot}
               />
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">

@@ -7,32 +7,60 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  buildSampleMetricRows,
+  userPlotAnchorId,
+} from "@/lib/custom-plot-metrics";
 import { computeQcBundle } from "@/lib/stats";
-import type { FragPipeDataset, QcPlotId } from "@/lib/types";
+import type {
+  FragPipeDataset,
+  QcPlotId,
+  UserCustomPlotSpec,
+} from "@/lib/types";
+import { CustomPlotBuilder } from "./CustomPlotBuilder";
 import { IntensityDistribution } from "./IntensityDistribution";
 import { MedianVsMissingness } from "./MedianVsMissingness";
 import { MissingnessPlot } from "./MissingnessPlot";
 import { QcSummary } from "./QcSummary";
 import { SampleCorrelation } from "./SampleCorrelation";
+import { UserDefinedPlot } from "./UserDefinedPlot";
 
-const PLOT_ANCHOR: Record<QcPlotId, string> = {
+const BUILTIN_PLOT_ANCHOR: Record<
+  Exclude<QcPlotId, `user-${string}`>,
+  string
+> = {
   missingness: "qc-plot-missingness",
   intensity: "qc-plot-intensity",
   correlation: "qc-plot-correlation",
   "median-vs-missing": "qc-plot-median-vs-missing",
 };
 
+function plotAnchor(plotId: QcPlotId): string {
+  if (plotId.startsWith("user-")) return userPlotAnchorId(plotId);
+  return BUILTIN_PLOT_ANCHOR[plotId as keyof typeof BUILTIN_PLOT_ANCHOR];
+}
+
 export function QcPanel({
   dataset,
   focusPlotId,
   focusToken = 0,
+  userCustomPlots,
+  onAddUserPlot,
+  onRemoveUserPlot,
 }: {
   dataset: FragPipeDataset;
   focusPlotId?: QcPlotId | null;
   focusToken?: number;
+  userCustomPlots: UserCustomPlotSpec[];
+  onAddUserPlot: (spec: UserCustomPlotSpec) => void;
+  onRemoveUserPlot: (id: string) => void;
 }) {
   // Single metrics pass shared by summary + all plots (critical after large uploads).
   const bundle = useMemo(() => computeQcBundle(dataset), [dataset]);
+  const sampleMetricRows = useMemo(
+    () => buildSampleMetricRows(dataset, bundle.miss, bundle.boxes),
+    [dataset, bundle.miss, bundle.boxes],
+  );
   const [highlight, setHighlight] = useState<QcPlotId | null>(null);
   // Mount plot cards after summary paints so upload → first paint feels snappier.
   const [plotsReady, setPlotsReady] = useState(false);
@@ -43,7 +71,7 @@ export function QcPanel({
   }, [dataset]);
 
   const jumpToPlot = useCallback((plotId: QcPlotId) => {
-    const id = PLOT_ANCHOR[plotId];
+    const id = plotAnchor(plotId);
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -86,7 +114,7 @@ export function QcPanel({
             </div>
 
             <PlotCard
-              anchorId={PLOT_ANCHOR.missingness}
+              anchorId={BUILTIN_PLOT_ANCHOR.missingness}
               highlighted={highlight === "missingness"}
             >
               <MissingnessPlot
@@ -97,7 +125,7 @@ export function QcPanel({
             </PlotCard>
 
             <PlotCard
-              anchorId={PLOT_ANCHOR.intensity}
+              anchorId={BUILTIN_PLOT_ANCHOR.intensity}
               highlighted={highlight === "intensity"}
             >
               <IntensityDistribution
@@ -109,7 +137,7 @@ export function QcPanel({
             </PlotCard>
 
             <PlotCard
-              anchorId={PLOT_ANCHOR.correlation}
+              anchorId={BUILTIN_PLOT_ANCHOR.correlation}
               highlighted={highlight === "correlation"}
             >
               <SampleCorrelation
@@ -129,12 +157,13 @@ export function QcPanel({
                 Custom plots
               </h2>
               <p className="text-sm text-slate-600">
-                Project-specific QC views beyond the standard Analyst suite.
+                Project-specific QC views plus user-defined charts from sample
+                metrics (scatter, bar, histogram).
               </p>
             </div>
 
             <PlotCard
-              anchorId={PLOT_ANCHOR["median-vs-missing"]}
+              anchorId={BUILTIN_PLOT_ANCHOR["median-vs-missing"]}
               highlighted={highlight === "median-vs-missing"}
               tone="custom"
             >
@@ -144,6 +173,25 @@ export function QcPanel({
                 colorMap={bundle.colorMap}
               />
             </PlotCard>
+
+            <CustomPlotBuilder onAdd={onAddUserPlot} />
+
+            {userCustomPlots.map((spec) => (
+              <PlotCard
+                key={spec.id}
+                anchorId={userPlotAnchorId(spec.id)}
+                highlighted={highlight === spec.id}
+                tone="custom"
+              >
+                <UserDefinedPlot
+                  dataset={dataset}
+                  spec={spec}
+                  rows={sampleMetricRows}
+                  colorMap={bundle.colorMap}
+                  onRemove={onRemoveUserPlot}
+                />
+              </PlotCard>
+            ))}
           </section>
         </>
       )}
