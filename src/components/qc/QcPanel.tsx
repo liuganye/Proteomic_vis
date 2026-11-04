@@ -15,6 +15,7 @@ import { computeQcBundle } from "@/lib/stats";
 import type {
   FragPipeDataset,
   QcPlotId,
+  SampleSelectionProps,
   UserCustomPlotSpec,
 } from "@/lib/types";
 import { CustomPlotBuilder } from "./CustomPlotBuilder";
@@ -47,6 +48,8 @@ export function QcPanel({
   userCustomPlots,
   onAddUserPlot,
   onRemoveUserPlot,
+  selectedSamples,
+  onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   focusPlotId?: QcPlotId | null;
@@ -54,7 +57,7 @@ export function QcPanel({
   userCustomPlots: UserCustomPlotSpec[];
   onAddUserPlot: (spec: UserCustomPlotSpec) => void;
   onRemoveUserPlot: (id: string) => void;
-}) {
+} & SampleSelectionProps) {
   // Single metrics pass shared by summary + all plots (critical after large uploads).
   const bundle = useMemo(() => computeQcBundle(dataset), [dataset]);
   const sampleMetricRows = useMemo(
@@ -91,7 +94,12 @@ export function QcPanel({
 
   return (
     <div className="space-y-8">
-      <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+        <p data-testid="qc-selected-samples" aria-live="polite"><strong>Selected samples:</strong> {selectedSamples.length ? selectedSamples.join(" + ") : "None"}</p>
+        <button type="button" onClick={() => onSelectSamples([])} disabled={!selectedSamples.length} className="rounded border border-slate-300 px-3 py-1 disabled:opacity-40">Clear sample selection</button>
+        <p className="w-full text-xs text-slate-600">Select a bar, point, or sample row in the built-in QC charts. A correlation cell selects both samples. Outlines mark selected samples across QC and protein abundance; the data and statistical analysis stay unchanged.</p>
+      </div>
+      {dataset.source === "real" ? <div id="qc-summary" className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"><strong>Real HYE dataset · descriptive QC</strong><p className="mt-1">Sample groups are inferred and unreviewed. Zero or blank intensities are treated as missing, without imputation. Cross-condition differences are not quality verdicts.</p></div> : <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />}
 
       {!plotsReady ? (
         <p className="text-sm text-slate-500" role="status">
@@ -121,6 +129,8 @@ export function QcPanel({
                 dataset={dataset}
                 rows={bundle.miss}
                 colorMap={bundle.colorMap}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
               />
             </PlotCard>
 
@@ -133,6 +143,8 @@ export function QcPanel({
                 boxes={bundle.boxes}
                 groups={bundle.groups}
                 colorMap={bundle.colorMap}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
               />
             </PlotCard>
 
@@ -144,6 +156,8 @@ export function QcPanel({
                 dataset={dataset}
                 matrix={bundle.correlation}
                 colorMap={bundle.colorMap}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
               />
             </PlotCard>
           </section>
@@ -171,6 +185,8 @@ export function QcPanel({
                 dataset={dataset}
                 rows={bundle.scatter}
                 colorMap={bundle.colorMap}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
               />
             </PlotCard>
 

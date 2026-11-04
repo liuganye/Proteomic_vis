@@ -112,3 +112,15 @@ def test_cors_accepts_the_configured_local_frontend(client):
         headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"},
     )
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+def test_qc_matrix_matches_abundance_and_coverage(client):
+    matrix = client.get("/api/v1/qc/matrix").json()
+    abundance = client.get("/api/v1/proteins/P1/abundance").json()["points"]
+    row = next(p for p in matrix["proteins"] if p["protein_id"] == "P1")
+    assert [s["sample_id"] for s in matrix["samples"]] == [p["sample_id"] for p in abundance]
+    assert row["values"] == [p["intensity"] for p in abundance]
+    assert None in row["values"]
+    qc = client.get("/api/v1/qc/samples").json()["samples"]
+    for index, sample in enumerate(qc):
+        assert sample["detected_count"] == sum(
+            p["values"][index] is not None for p in matrix["proteins"]
+        )
