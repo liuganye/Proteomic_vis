@@ -181,9 +181,11 @@ export function DownstreamPanel({ dataset, module }: Props) {
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Volcano plot</h3>
           <p className="text-sm text-slate-600">
-            Choose any two annotation groups. Uses limma adjusted p-value and
-            log<sub>2</sub> fold change when that contrast exists; otherwise
-            approximates from MaxLFQ group means.
+            Choose any two annotation groups. MaxLFQ columns are autodetected
+            (`{"{sample} MaxLFQ Intensity"}`) and mapped to groups via sample ID,
+            Control↔CTRK-style synonyms, or residual size matching. Uses limma
+            when that contrast exists; otherwise approximates from MaxLFQ group
+            means.
           </p>
         </div>
         {groupControls}

@@ -5,7 +5,12 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { buildDataset } from "../src/lib/parse-fragpipe.ts";
+import {
+  alignAnnotationToSamples,
+  buildDataset,
+  sameSynonymGroup,
+  synonymKey,
+} from "../src/lib/parse-fragpipe.ts";
 import {
   annotationGroups,
   approximateGroupContrast,
@@ -24,6 +29,11 @@ function assert(cond: unknown, msg: string) {
     console.log("ok:", msg);
   }
 }
+
+assert(sameSynonymGroup("Control", "CTRK"), "Control↔CTRK synonym");
+assert(sameSynonymGroup("CTRL", "CTRK"), "CTRL↔CTRK synonym");
+assert(synonymKey("FLU10") === synonymKey("flu"), "FLU10↔flu synonym key");
+assert(!sameSynonymGroup("PTX", "FLU"), "PTX is not a FLU synonym (residual handles it)");
 
 const mockP = fs.readFileSync(
   path.join(root, "public/mock-data/combined_protein.tsv"),
@@ -44,40 +54,47 @@ assert(
   "limma Human_vs_QC matched",
 );
 const mockVolcano = volcanoForGroups(mock, "Human", "QC");
-assert(mockVolcano.points.length === 120, `mock limma points=${mockVolcano.points.length}`);
+assert(
+  mockVolcano.points.length === 120,
+  `mock limma points=${mockVolcano.points.length}`,
+);
 assert(mockVolcano.approximated === false, "mock uses limma not approx");
 assert(
   mockVolcano.points.every((p) => p.proteinProbability != null),
   "mock volcano carries Protein Probability",
 );
 
-// Mismatched CTRK/FLU annotation vs Control/PTX protein (Henry's local pair)
+// Henry: CTRK/FLU annotation + Control/PTX MaxLFQ → keep CTRK/FLU groups
 const ctrkAnnPath = "/Users/liuganye/Downloads/experiment_annotation (1).tsv";
 const ptxPath = "/Users/liuganye/Downloads/combined_protein (1).tsv";
 if (fs.existsSync(ctrkAnnPath) && fs.existsSync(ptxPath)) {
-  const mismatched = buildDataset({
+  const auto = buildDataset({
     proteinText: fs.readFileSync(ptxPath, "utf8"),
     annotationText: fs.readFileSync(ctrkAnnPath, "utf8"),
     source: "upload",
   });
-  assert(Boolean(mismatched.annotationWarning), "mismatch sets annotationWarning");
-  const groups = annotationGroups(mismatched);
+  assert(Boolean(auto.annotationWarning), "autodetect sets mapping warning");
+  const groups = annotationGroups(auto);
   assert(
-    groups.includes("Control") && groups.includes("PTX"),
-    `inferred groups from MaxLFQ: ${groups.join(",")}`,
+    groups.includes("CTRK") && groups.includes("FLU"),
+    `autodetect keeps annotation groups: ${groups.join(",")}`,
   );
   assert(
-    !groups.includes("CTRK") && !groups.includes("FLU"),
-    "unmapped CTRK/FLU labels are not offered",
+    auto.annotation.some((a) => a.sample === "Control_1" && a.condition === "CTRK"),
+    "Control_1 MaxLFQ → CTRK",
   );
-  const v = volcanoForGroups(mismatched, "Control", "PTX");
-  assert(v.points.length > 0, `mismatch fallback volcano points=${v.points.length}`);
-  assert(v.approximated, "mismatch fallback is MaxLFQ approx");
+  assert(
+    auto.annotation.some((a) => a.sample.startsWith("PTX_") && a.condition === "FLU"),
+    "PTX_* MaxLFQ → FLU via residual cardinality",
+  );
+  const v = volcanoForGroups(auto, "CTRK", "FLU");
+  assert(v.points.length > 0, `CTRK vs FLU autodetect points=${v.points.length}`);
+  assert(v.approximated, "CTRK vs FLU uses MaxLFQ approx");
 } else {
   console.log("skip: Henry CTRK/PTX local files not present");
 }
 
-// Matching CTRK/FLU rename of MaxLFQ headers
+// Matching CTRK/FLU rename of MaxLFQ headers (exact)
 if (fs.existsSync(ctrkAnnPath) && fs.existsSync(ptxPath)) {
   let text = fs.readFileSync(ptxPath, "utf8");
   const map: Record<string, string> = {
@@ -94,17 +111,43 @@ if (fs.existsSync(ctrkAnnPath) && fs.existsSync(ptxPath)) {
     annotationText: fs.readFileSync(ctrkAnnPath, "utf8"),
     source: "upload",
   });
-  assert(!matched.annotationWarning, "renamed MaxLFQ aligns to CTRK/FLU annotation");
+  assert(!matched.annotationWarning, "exact MaxLFQ IDs align without warning");
   assert(
     annotationGroups(matched).join(",") === "CTRK,FLU",
     `matched groups=${annotationGroups(matched)}`,
   );
   const v = volcanoForGroups(matched, "CTRK", "FLU");
-  assert(v.points.length > 5000, `CTRK vs FLU approx points=${v.points.length}`);
-  assert(v.approximated, "CTRK vs FLU uses MaxLFQ approx when no limma cols");
-  // one-sided proteins kept
+  assert(v.points.length > 5000, `CTRK vs FLU exact points=${v.points.length}`);
   const approx = approximateGroupContrast(matched, "CTRK", "FLU");
-  assert(approx && approx.points.length > 5227, "one-sided detections kept in approx");
+  assert(
+    approx && approx.points.length > 5227,
+    "one-sided detections kept in approx",
+  );
+}
+
+// Unit: alignAnnotationToSamples synonym mode
+{
+  const aligned = alignAnnotationToSamples(
+    [
+      { file: "CTRL-1.raw", sample: "CTRK_1", condition: "CTRK", replicate: "1" },
+      { file: "CTRL-2.raw", sample: "CTRK_2", condition: "CTRK", replicate: "2" },
+      { file: "FLU-1.raw", sample: "FLU_3", condition: "FLU", replicate: "3" },
+      { file: "FLU-2.raw", sample: "FLU_4", condition: "FLU", replicate: "4" },
+    ],
+    ["Control_1", "Control_2", "Treatment_3", "Treatment_4"],
+  );
+  assert(aligned.mode === "synonym" || aligned.mode === "residual", `mode=${aligned.mode}`);
+  assert(
+    aligned.annotation.filter((a) => a.condition === "CTRK").map((a) => a.sample).join(",") ===
+      "Control_1,Control_2",
+    "synonym maps Control→CTRK",
+  );
+  assert(
+    aligned.annotation.filter((a) => a.condition === "FLU").every((a) =>
+      a.sample.startsWith("Treatment_"),
+    ),
+    "residual maps Treatment→FLU",
+  );
 }
 
 // Protein-only upload: infer groups from sample prefixes
@@ -131,8 +174,14 @@ if (fs.existsSync(realP) && fs.existsSync(realA)) {
     source: "upload",
   });
   const v = volcanoForGroups(real, "Human", "QC");
-  assert(v.points.length > 1000, `real Human vs QC approx points=${v.points.length}`);
-  assert(real.proteins[0].proteinProbability != null, "real Protein Probability parsed");
+  assert(
+    v.points.length > 1000,
+    `real Human vs QC approx points=${v.points.length}`,
+  );
+  assert(
+    real.proteins[0].proteinProbability != null,
+    "real Protein Probability parsed",
+  );
 }
 
 if (failed > 0) {
