@@ -2,6 +2,8 @@
 
 A local, read-only demonstration for exploring a fixed proteomics dataset. Search or select a protein to connect Human − QC differential results, observed abundance, STRING associations, annotations, and available local structures.
 
+[中文说明：开发版的数据来源、网页功能与使用边界](./WEB_GUIDE.zh-CN.md)
+
 ## Contents
 
 - Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes upload/mock QC (summary→jump, Conventional/Custom) and RealExplore.
