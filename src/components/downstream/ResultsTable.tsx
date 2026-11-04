@@ -15,6 +15,11 @@ export function ResultsTable({ points, contrastLabel }: Props) {
   const [page, setPage] = useState(0);
   const pageSize = 25;
 
+  const hasProbability = useMemo(
+    () => points.some((p) => p.proteinProbability != null),
+    [points],
+  );
+
   const rows = useMemo(() => {
     let r = resultsTableRows(points);
     if (sigOnly) r = r.filter((p) => p.significant);
@@ -87,6 +92,9 @@ export function ResultsTable({ points, contrastLabel }: Props) {
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Gene</th>
                   <th className="px-3 py-2">Protein ID</th>
+                  {hasProbability && (
+                    <th className="px-3 py-2">Protein Prob.</th>
+                  )}
                   <th className="px-3 py-2">log2FC</th>
                   <th className="px-3 py-2">adj.P</th>
                   <th className="px-3 py-2">−log10(adj.P)</th>
@@ -105,6 +113,13 @@ export function ResultsTable({ points, contrastLabel }: Props) {
                     <td className="px-3 py-1.5 font-mono text-xs text-slate-700">
                       {r.proteinId}
                     </td>
+                    {hasProbability && (
+                      <td className="px-3 py-1.5 tabular-nums text-slate-700">
+                        {r.proteinProbability == null
+                          ? "—"
+                          : r.proteinProbability.toFixed(4)}
+                      </td>
+                    )}
                     <td className="px-3 py-1.5 tabular-nums">
                       {r.log2fc.toFixed(3)}
                     </td>

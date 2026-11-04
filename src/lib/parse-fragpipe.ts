@@ -296,17 +296,20 @@ export function parseExperimentAnnotation(text: string): ExperimentAnnotation[] 
     throw new Error("experiment_annotation.tsv has no data rows");
   }
   const headers = rows[0];
-  const keys = headers.map((k) => k.toLowerCase());
+  const keys = headers.map((k) => k.toLowerCase().replace(/[\s_]+/g, ""));
   const find = (names: string[]) => {
-    const idx = keys.findIndex((k) => names.includes(k));
-    return idx;
+    const normalized = names.map((n) => n.toLowerCase().replace(/[\s_]+/g, ""));
+    return keys.findIndex((k) => normalized.includes(k));
   };
-  const sampleIdx = find(["sample", "sample name", "samplename"]);
-  const conditionIdx = find(["condition", "group", "condition name"]);
-  const fileIdx = find(["file", "filename", "raw file"]);
-  const repIdx = find(["replicate", "rep", "bio_rep"]);
+  // Prefer dedicated `sample` over `sample_name` when both exist.
+  const sampleIdx = find(["sample"]);
+  const sampleNameIdx = find(["samplename", "sample name"]);
+  const resolvedSampleIdx = sampleIdx >= 0 ? sampleIdx : sampleNameIdx;
+  const conditionIdx = find(["condition", "group", "conditionname"]);
+  const fileIdx = find(["file", "filename", "rawfile"]);
+  const repIdx = find(["replicate", "rep", "biorep"]);
 
-  if (sampleIdx < 0 || conditionIdx < 0) {
+  if (resolvedSampleIdx < 0 || conditionIdx < 0) {
     throw new Error(
       "experiment_annotation.tsv needs at least 'sample' and 'condition' columns",
     );
@@ -314,23 +317,168 @@ export function parseExperimentAnnotation(text: string): ExperimentAnnotation[] 
 
   return rows.slice(1).map((row) => ({
     file: fileIdx >= 0 ? row[fileIdx] ?? "" : "",
-    sample: row[sampleIdx] ?? "",
-    condition: row[conditionIdx] ?? "",
-    replicate: repIdx >= 0 ? row[repIdx] ?? "" : "",
+    sample: (row[resolvedSampleIdx] ?? "").trim(),
+    sampleName:
+      sampleNameIdx >= 0 ? (row[sampleNameIdx] ?? "").trim() : undefined,
+    condition: (row[conditionIdx] ?? "").trim(),
+    replicate: repIdx >= 0 ? (row[repIdx] ?? "").trim() : "",
   }));
 }
 
-function inferAnnotation(samples: string[]): ExperimentAnnotation[] {
-  return samples.map((sample, i) => ({
-    file: `${sample}.raw`,
-    sample,
-    condition: /qc/i.test(sample)
-      ? "QC"
-      : /human/i.test(sample)
-        ? "Human"
-        : "Unknown",
-    replicate: String(i + 1),
-  }));
+/** Strip path + extension from a FragPipe `file` / raw path. */
+export function fileStem(file: string): string {
+  const base = file.split(/[/\\]/).pop() ?? file;
+  return base.replace(/\.(raw|mzml|mzXML|d)$/i, "");
+}
+
+/** Normalize sample tokens for fuzzy MaxLFQ ↔ annotation matching. */
+export function normalizeSampleKey(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Infer a condition/group label from a MaxLFQ sample id.
+ * `CTRK_1` → CTRK, `Control_3` → Control, `Condition_A_34` → Condition_A,
+ * `QC_10` → QC.
+ */
+export function inferConditionFromSample(sample: string): string {
+  const s = sample.trim();
+  if (!s) return "Unknown";
+  if (/^qc([_-]?\d+)?$/i.test(s)) return "QC";
+  if (/^human([_-]?\d+)?$/i.test(s)) return "Human";
+  // Prefer longest prefix before a trailing _<digits> (keeps Condition_A_34)
+  const m = s.match(/^(.*?)[_-](\d+)$/);
+  if (m && m[1] && m[1].length > 0) return m[1];
+  return s;
+}
+
+function previewIds(ids: string[], n = 6): string {
+  if (ids.length <= n) return ids.join(", ");
+  return `${ids.slice(0, n).join(", ")}… (+${ids.length - n} more)`;
+}
+
+/**
+ * Map experiment_annotation rows onto MaxLFQ sample column prefixes.
+ * Falls back to inferring groups from MaxLFQ names when no IDs overlap
+ * (common when annotation was renamed but protein headers were not).
+ */
+export function alignAnnotationToSamples(
+  annotation: ExperimentAnnotation[],
+  samples: string[],
+): { annotation: ExperimentAnnotation[]; warning?: string } {
+  if (samples.length === 0) {
+    return { annotation: [] };
+  }
+  if (!annotation.length) {
+    return { annotation: inferAnnotation(samples) };
+  }
+
+  const sampleSet = new Set(samples);
+  const byNorm = new Map<string, string>();
+  for (const s of samples) {
+    const key = normalizeSampleKey(s);
+    if (key && !byNorm.has(key)) byNorm.set(key, s);
+  }
+
+  const used = new Set<string>();
+  const matched: ExperimentAnnotation[] = [];
+  let nMatched = 0;
+
+  for (const row of annotation) {
+    const candidates = [row.sample, row.sampleName, fileStem(row.file)].filter(
+      (c): c is string => Boolean(c && c.trim()),
+    );
+    let hit: string | undefined;
+    for (const c of candidates) {
+      if (sampleSet.has(c) && !used.has(c)) {
+        hit = c;
+        break;
+      }
+      const fuzzy = byNorm.get(normalizeSampleKey(c));
+      if (fuzzy && !used.has(fuzzy)) {
+        hit = fuzzy;
+        break;
+      }
+    }
+    if (!hit) continue;
+    used.add(hit);
+    nMatched += 1;
+    matched.push({
+      ...row,
+      sample: hit,
+      condition: (row.condition || inferConditionFromSample(hit)).trim(),
+    });
+  }
+
+  if (nMatched > 0) {
+    const extras = samples
+      .filter((s) => !used.has(s))
+      .map((sample, i) => ({
+        file: `${sample}.raw`,
+        sample,
+        sampleName: sample,
+        condition: inferConditionFromSample(sample),
+        replicate: String(i + 1),
+      }));
+    const warning =
+      nMatched < annotation.length
+        ? `Matched ${nMatched}/${annotation.length} annotation rows to MaxLFQ samples. Unmatched annotation IDs were ignored; remaining intensity columns use inferred groups.`
+        : undefined;
+    return { annotation: [...matched, ...extras], warning };
+  }
+
+  // No overlap: ignore mismatched annotation sample IDs and infer from MaxLFQ.
+  const inferred = inferAnnotation(samples);
+  const annIds = annotation.map((a) => a.sample).filter(Boolean);
+  const groups = Array.from(
+    new Set(inferred.map((a) => a.condition).filter(Boolean)),
+  );
+  const warning =
+    `Annotation sample IDs (${previewIds(annIds)}) do not match MaxLFQ columns (${previewIds(samples)}). ` +
+    `Using groups inferred from MaxLFQ sample names (${groups.join(", ") || "—"}). ` +
+    `For Downstream contrasts, annotation \`sample\` must match the prefix of \`{sample} MaxLFQ Intensity\` headers.`;
+  return { annotation: inferred, warning };
+}
+
+export function inferAnnotation(samples: string[]): ExperimentAnnotation[] {
+  return samples.map((sample, i) => {
+    const condition = inferConditionFromSample(sample);
+    const repMatch = sample.trim().match(/[_-](\d+)$/);
+    return {
+      file: `${sample}.raw`,
+      sample,
+      sampleName: sample,
+      condition,
+      replicate: repMatch?.[1] ?? String(i + 1),
+    };
+  });
+}
+
+function attachAnnotation(
+  core: Omit<
+    FragPipeDataset,
+    "annotation" | "source" | "proteinFileName" | "annotationFileName" | "annotationWarning"
+  >,
+  annotationText: string | null | undefined,
+  meta: {
+    source: "mock" | "upload";
+    proteinFileName?: string;
+    annotationFileName?: string;
+  },
+): FragPipeDataset {
+  const raw =
+    annotationText && annotationText.trim()
+      ? parseExperimentAnnotation(annotationText)
+      : [];
+  const { annotation, warning } = alignAnnotationToSamples(raw, core.samples);
+  return {
+    ...core,
+    annotation,
+    annotationWarning: warning,
+    source: meta.source,
+    proteinFileName: meta.proteinFileName,
+    annotationFileName: meta.annotationFileName,
+  };
 }
 
 export function buildDataset(opts: {
@@ -341,17 +489,7 @@ export function buildDataset(opts: {
   annotationFileName?: string;
 }): FragPipeDataset {
   const core = parseCombinedProtein(opts.proteinText);
-  const annotation =
-    opts.annotationText && opts.annotationText.trim()
-      ? parseExperimentAnnotation(opts.annotationText)
-      : inferAnnotation(core.samples);
-  return {
-    ...core,
-    annotation,
-    source: opts.source,
-    proteinFileName: opts.proteinFileName,
-    annotationFileName: opts.annotationFileName,
-  };
+  return attachAnnotation(core, opts.annotationText, opts);
 }
 
 export async function buildDatasetAsync(
@@ -370,17 +508,7 @@ export async function buildDatasetAsync(
     message: "Applying sample annotation…",
     fraction: 0.97,
   });
-  const annotation =
-    opts.annotationText && opts.annotationText.trim()
-      ? parseExperimentAnnotation(opts.annotationText)
-      : inferAnnotation(core.samples);
-  return {
-    ...core,
-    annotation,
-    source: opts.source,
-    proteinFileName: opts.proteinFileName,
-    annotationFileName: opts.annotationFileName,
-  };
+  return attachAnnotation(core, opts.annotationText, opts);
 }
 
 export async function fetchMockDataset(
