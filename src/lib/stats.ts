@@ -64,6 +64,45 @@ export function intensityLong(
   return out;
 }
 
+/** Count every positive finite observation; only the aggregated bins are plotted. */
+export function intensityHistogram(dataset: FragPipeDataset, binCount = 30) {
+  if (!Number.isInteger(binCount) || binCount < 1) throw new Error("binCount must be a positive integer");
+  let min = Infinity;
+  let max = -Infinity;
+  let total = 0;
+  for (const protein of dataset.proteins) {
+    for (const sample of dataset.samples) {
+      const raw = protein.maxlfq[sample];
+      if (!(raw > 0) || !Number.isFinite(raw)) continue;
+      const value = Math.log10(raw);
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      total += 1;
+    }
+  }
+  if (!total) return { bins: [], total: 0 };
+  // Constant data occupies one explicitly bounded bin.
+  const count = min === max ? 1 : binCount;
+  const start = min === max ? min - 0.5 : min;
+  const end = min === max ? max + 0.5 : max;
+  const width = (end - start) / count;
+  const bins = Array.from({ length: count }, (_, i) => ({
+    lower: start + i * width,
+    upper: i === count - 1 ? end : start + (i + 1) * width,
+    midpoint: start + (i + 0.5) * width,
+    count: 0,
+  }));
+  for (const protein of dataset.proteins) {
+    for (const sample of dataset.samples) {
+      const raw = protein.maxlfq[sample];
+      if (!(raw > 0) || !Number.isFinite(raw)) continue;
+      const index = Math.max(0, Math.min(count - 1, Math.floor((Math.log10(raw) - start) / width)));
+      bins[index].count += 1;
+    }
+  }
+  return { bins, total };
+}
+
 export function intensityBoxBySample(dataset: FragPipeDataset): {
   sample: string;
   condition: string;

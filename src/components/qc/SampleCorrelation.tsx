@@ -1,25 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { sampleCorrelationMatrix } from "@/lib/stats";
-import type { FragPipeDataset } from "@/lib/types";
-
-function colorForR(r: number): string {
-  if (!Number.isFinite(r)) return "#e2e8f0";
-  const t = Math.max(0, Math.min(1, (r - 0.5) / 0.5));
-  const rC = Math.round(180 - t * 140);
-  const gC = Math.round(100 + t * 60);
-  const bC = Math.round(40 + t * 70);
-  return `rgb(${rC},${gC},${bC})`;
-}
+import { correlationColor, correlationTextColor } from "@/lib/visualization";
+import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 export function SampleCorrelation({
   dataset,
   matrix: precomputed,
+  selectedSamples,
+  onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   matrix?: ReturnType<typeof sampleCorrelationMatrix>;
-}) {
+} & SampleSelectionProps) {
   const { samples, matrix } = precomputed ?? sampleCorrelationMatrix(dataset);
+  const [showValues, setShowValues] = useState(false);
+  const [activeCell, setActiveCell] = useState(0);
 
   return (
     <div>
@@ -29,24 +26,34 @@ export function SampleCorrelation({
         </h3>
         <p className="text-sm text-slate-600">
           Pairwise Pearson correlation of log<sub>10</sub>(MaxLFQ) across
-          proteins (pairwise-complete; zeros excluded). A PCA-style overview of
-          sample similarity without a full dimension-reduction stack.
+          proteins observed in both samples. Zero and blank values are excluded;
+          different pairs can use different sets of proteins.
         </p>
       </header>
 
-      <div className="overflow-x-auto">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-700">
+        <div className="w-64 max-w-full" aria-label="Pearson r color scale: orange at minus one, neutral at zero, blue at plus one">
+          <p className="mb-1 font-medium">Pearson r · full range</p>
+          <div className="h-3 rounded-sm border border-slate-300" style={{ background: "linear-gradient(to right, rgb(179, 88, 6), rgb(247, 247, 247), rgb(33, 102, 172))" }} />
+          <div className="mt-1 flex justify-between"><span>−1</span><span>0</span><span>+1</span></div>
+        </div>
+        <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center bg-slate-200 text-slate-700">—</span> NA / undefined</span>
+        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={showValues} onChange={e => setShowValues(e.target.checked)} /> Show cell values</label>
+      </div>
+      <div className="relative max-h-[48rem] max-w-full overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700" tabIndex={0} role="region" aria-label="Sample correlation matrix. Scroll within the matrix to inspect all samples.">
         <table className="border-collapse text-xs">
+          <caption className="sr-only">Sample–sample Pearson correlation of log10 MaxLFQ. Rows and columns identify samples.</caption>
           <thead>
             <tr>
-              <th className="p-1" />
+              <th className="sticky left-0 top-0 z-30 bg-white p-1"><span className="sr-only">Sample</span></th>
               {samples.map((s) => (
                 <th
                   key={s}
-                  className="max-w-[4.5rem] truncate p-1 font-medium text-slate-600"
+                  scope="col"
+                  className="sticky top-0 z-10 bg-white p-0 text-[10px] leading-none font-medium text-slate-600"
                   title={s}
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
                 >
-                  {s}
+                  <button type="button" aria-label={`Select column sample ${s}`} aria-pressed={selectedSamples.includes(s)} onClick={() => onSelectSamples([s])} className={`inline-block max-h-32 truncate ${selectedSamples.includes(s) ? "bg-teal-100 font-bold text-slate-900" : ""}`} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{s}</button>
                 </th>
               ))}
             </tr>
@@ -54,20 +61,35 @@ export function SampleCorrelation({
           <tbody>
             {samples.map((row, i) => (
               <tr key={row}>
-                <th className="whitespace-nowrap pr-2 text-right font-medium text-slate-700">
-                  {row}
+                <th scope="row" className="sticky left-0 z-10 bg-white pr-2 text-right font-medium text-slate-700" title={row}>
+                  <button type="button" aria-label={`Select row sample ${row}`} aria-pressed={selectedSamples.includes(row)} onClick={() => onSelectSamples([row])} className={`block max-w-32 truncate ${selectedSamples.includes(row) ? "bg-teal-100 font-bold text-slate-900" : ""}`}>{row}</button>
                 </th>
                 {samples.map((col, j) => {
                   const r = matrix[i][j];
+                  const marked = selectedSamples.includes(row) || selectedSamples.includes(col);
+                  const pairSelected = selectedSamples.includes(row) && selectedSamples.includes(col);
                   return (
-                    <td key={col} className="p-0.5">
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-sm text-[10px] font-medium text-white"
-                        style={{ background: colorForR(r) }}
+                    <td key={col} className="p-px">
+                      <button type="button"
+                        className={`flex items-center justify-center text-[10px] font-medium tabular-nums ${showValues ? "h-9 w-9" : "h-3.5 w-3.5"}`}
+                        style={{ background: correlationColor(r), color: correlationTextColor(r), boxShadow: marked ? `inset 0 0 0 ${pairSelected ? 2 : 1}px #0f172a` : undefined }}
                         title={`${row} × ${col}: ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
+                        aria-label={`Select samples ${row} and ${col}; r ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
+                        aria-pressed={pairSelected}
+                        data-cell-index={i * samples.length + j}
+                        tabIndex={activeCell === i * samples.length + j ? 0 : -1}
+                        onFocus={() => setActiveCell(i * samples.length + j)}
+                        onClick={() => onSelectSamples([...new Set([row, col])])}
+                        onKeyDown={e => {
+                          const step = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[e.key];
+                          if (!step) return;
+                          e.preventDefault();
+                          const next = Math.max(0, Math.min(samples.length - 1, i + step[0])) * samples.length + Math.max(0, Math.min(samples.length - 1, j + step[1]));
+                          e.currentTarget.closest("table")?.querySelector<HTMLButtonElement>(`[data-cell-index="${next}"]`)?.focus();
+                        }}
                       >
-                        {Number.isFinite(r) ? r.toFixed(2) : "—"}
-                      </div>
+                        <span className={showValues || !Number.isFinite(r) ? "" : "sr-only"}>{Number.isFinite(r) ? r.toFixed(2) : "—"}</span>
+                      </button>
                     </td>
                   );
                 })}
@@ -77,7 +99,8 @@ export function SampleCorrelation({
         </table>
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        Color scale: lower r → amber, higher r → teal. Diagonal is 1.00.
+        Orange: negative correlation. Neutral: zero. Blue: positive correlation.
+        Select a label for one sample or a cell for both. Use arrow keys between cells and Enter to select. Outlines mark selected rows and columns. Scroll stays inside this matrix.
       </p>
     </div>
   );

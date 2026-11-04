@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useDataset } from "@/hooks/use-dataset";
 import type {
   DownstreamModuleId,
@@ -10,6 +10,8 @@ import type {
 import { DownstreamPanel } from "./downstream/DownstreamPanel";
 import { FileUploadPanel } from "./FileUploadPanel";
 import { QcPanel } from "./qc/QcPanel";
+import { RealExplore } from "./RealExplore";
+import { initialExploreState, type ExploreState } from "@/lib/visualization";
 
 const QC_NAV: { id: QcPlotId; label: string; blurb: string; group: "conventional" | "custom" }[] = [
   {
@@ -56,8 +58,19 @@ const DOWNSTREAM_MODULES: {
 ];
 
 export function AppShell() {
-  const { state, loadMock, loadFiles, clear } = useDataset();
+  const { state, loadMock, loadFiles, loadReal, clear } = useDataset();
+  const [proteinFocus, setProteinFocus] = useState("O00148");
+  const [selectedSamples, setSelectedSamples] = useState<string[]>([]);
+  const [analysis, setAnalysis] = useState<ExploreState>(initialExploreState);
+  useEffect(() => { const timer = window.setTimeout(() => void loadReal(), 0); return () => window.clearTimeout(timer); }, [loadReal]);
+  const linkedSamples = selectedSamples.filter(sample => state.dataset?.samples.includes(sample));
+  useEffect(() => {
+    setSelectedSamples([]);
+    setAnalysis(initialExploreState);
+    setProteinFocus("O00148");
+  }, [state.dataset]);
   const [section, setSection] = useState<SectionId>("qc");
+  const [showRealExplore, setShowRealExplore] = useState(false);
   const [qcFocus, setQcFocus] = useState<QcPlotId | null>(null);
   const [qcFocusToken, setQcFocusToken] = useState(0);
   const [dsModule, setDsModule] = useState<DownstreamModuleId>("volcano");
@@ -86,6 +99,16 @@ export function AppShell() {
           </div>
 
           <nav className="px-3 pb-4" aria-label="Sections">
+            <button
+              type="button"
+              aria-pressed={showRealExplore}
+              onClick={() => setShowRealExplore(true)}
+              className={showRealExplore
+                ? "mb-3 w-full rounded-lg bg-teal-800 px-3 py-2 text-left text-sm font-semibold text-white"
+                : "mb-3 w-full rounded-lg bg-slate-100 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200"}
+            >
+              Real data explore
+            </button>
             <div className="mb-2 flex gap-1 rounded-lg bg-slate-100 p-1">
               {(
                 [
@@ -96,9 +119,9 @@ export function AppShell() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setSection(id)}
+                  onClick={() => { setShowRealExplore(false); setSection(id); }}
                   className={
-                    section === id
+                    !showRealExplore && section === id
                       ? "flex-1 rounded-md bg-white px-2 py-1.5 text-sm font-semibold text-teal-900 shadow-sm"
                       : "flex-1 rounded-md px-2 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
                   }
@@ -108,7 +131,7 @@ export function AppShell() {
               ))}
             </div>
 
-            {section === "qc" ? (
+            {!showRealExplore && (section === "qc" ? (
               <div className="space-y-3">
                 <NavGroup label="Summary">
                   <button
@@ -156,19 +179,24 @@ export function AppShell() {
                       label={m.label}
                       blurb={m.blurb}
                       selected={dsModule === m.id}
-                      onClick={() => setDsModule(m.id)}
+                      onClick={() => {
+                        setDsModule(m.id);
+                        document.getElementById(m.id === "results" ? "real-results" : "real-volcano")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
                     />
                   </li>
                 ))}
               </ul>
-            )}
+            ))}
           </nav>
         </aside>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          {showRealExplore || (section === "downstream" && state.dataset?.source === "real") ? state.status === "ready" && state.dataset?.source === "real" ? <RealExplore totalProteins={state.dataset.proteins.length} focus={proteinFocus} setFocus={setProteinFocus} selectedSamples={linkedSamples} onSelectSamples={setSelectedSamples} analysis={analysis} setAnalysis={setAnalysis} focusResults={!showRealExplore && dsModule === "results"} onReturnQc={() => { setShowRealExplore(false); setSection("qc"); }} /> : <div className="rounded-xl border bg-white p-6"><h2 className="text-xl font-semibold">Real data explore</h2><p className="mt-2 text-sm">{state.status === "loading" ? "Loading the real dataset…" : state.status === "error" ? state.error : "Load the real dataset to connect this view to QC. Your uploaded or mock data remains separate."}</p><button type="button" disabled={state.status === "loading"} onClick={() => void loadReal()} className="mt-4 rounded bg-teal-800 px-3 py-2 text-white disabled:opacity-50">Load real dataset</button></div> : <>
           <FileUploadPanel
             state={state}
             onLoadMock={loadMock}
+            onLoadReal={loadReal}
             onLoadFiles={loadFiles}
             onClear={clear}
           />
@@ -186,12 +214,15 @@ export function AppShell() {
                   }
                 />
               </div>
-            ) : section === "qc" ? (
+            ) : section === "qc" ? (<>
+              {state.dataset.source === "real" && <div className="mb-4 rounded-xl border border-teal-200 bg-white p-4 text-sm"><label htmlFor="linked-sample" className="block font-semibold">Sample shared with Real data explore</label><select id="linked-sample" className="mt-2 max-w-full rounded border border-slate-300 p-2" value={linkedSamples[0] ?? ""} onChange={e => setSelectedSamples(e.target.value ? [e.target.value] : [])}><option value="">No sample selected</option>{state.dataset.annotation.map(a => <option key={a.sample} value={a.sample}>{a.sample} · {a.condition} (unreviewed)</option>)}</select><p className="mt-2">Focused protein in explore: <strong>{proteinFocus}</strong>. QC plots summarize all proteins.</p></div>}
               <QcPanel
                 dataset={state.dataset}
                 focusPlotId={qcFocus}
                 focusToken={qcFocusToken}
-              />
+                selectedSamples={linkedSamples}
+                onSelectSamples={setSelectedSamples}
+              /></>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <DownstreamPanel dataset={state.dataset} module={dsModule} />
@@ -213,6 +244,7 @@ export function AppShell() {
             FragPipe Analyst–style structure in JS; it is not a fork of the Shiny
             source.
           </footer>
+          </>}
         </main>
       </div>
     </div>

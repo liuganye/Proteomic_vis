@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { computeQcBundle } from "@/lib/stats";
-import type { FragPipeDataset, QcPlotId } from "@/lib/types";
+import type { FragPipeDataset, QcPlotId, SampleSelectionProps } from "@/lib/types";
 import { IntensityDistribution } from "./IntensityDistribution";
 import { MedianVsMissingness } from "./MedianVsMissingness";
 import { MissingnessPlot } from "./MissingnessPlot";
@@ -26,11 +26,13 @@ export function QcPanel({
   dataset,
   focusPlotId,
   focusToken = 0,
+  selectedSamples,
+  onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   focusPlotId?: QcPlotId | null;
   focusToken?: number;
-}) {
+} & SampleSelectionProps) {
   // Single metrics pass shared by summary + all plots (critical after large uploads).
   const bundle = useMemo(() => computeQcBundle(dataset), [dataset]);
   const [highlight, setHighlight] = useState<QcPlotId | null>(null);
@@ -63,7 +65,12 @@ export function QcPanel({
 
   return (
     <div className="space-y-8">
-      <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+        <p data-testid="qc-selected-samples" aria-live="polite"><strong>Selected samples:</strong> {selectedSamples.length ? selectedSamples.join(" + ") : "None"}</p>
+        <button type="button" onClick={() => onSelectSamples([])} disabled={!selectedSamples.length} className="rounded border border-slate-300 px-3 py-1 disabled:opacity-40">Clear sample selection</button>
+        <p className="w-full text-xs text-slate-600">Select a bar, point, or sample row. A correlation cell selects both samples. Outlines mark selected samples across QC and protein abundance; the data and statistical analysis stay unchanged.</p>
+      </div>
+      {dataset.source === "real" ? <div id="qc-summary" className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"><strong>Real HYE dataset · descriptive QC</strong><p className="mt-1">Sample groups are inferred and unreviewed. Zero or blank intensities are treated as missing, without imputation. Cross-condition differences are not quality verdicts.</p></div> : <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />}
 
       {!plotsReady ? (
         <p className="text-sm text-slate-500" role="status">
@@ -89,14 +96,14 @@ export function QcPanel({
               anchorId={PLOT_ANCHOR.missingness}
               highlighted={highlight === "missingness"}
             >
-              <MissingnessPlot dataset={dataset} rows={bundle.miss} />
+              <MissingnessPlot dataset={dataset} rows={bundle.miss} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples} />
             </PlotCard>
 
             <PlotCard
               anchorId={PLOT_ANCHOR.intensity}
               highlighted={highlight === "intensity"}
             >
-              <IntensityDistribution dataset={dataset} boxes={bundle.boxes} />
+              <IntensityDistribution dataset={dataset} boxes={bundle.boxes} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples} />
             </PlotCard>
 
             <PlotCard
@@ -106,6 +113,8 @@ export function QcPanel({
               <SampleCorrelation
                 dataset={dataset}
                 matrix={bundle.correlation}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
               />
             </PlotCard>
           </section>
@@ -128,7 +137,7 @@ export function QcPanel({
               highlighted={highlight === "median-vs-missing"}
               tone="custom"
             >
-              <MedianVsMissingness dataset={dataset} rows={bundle.scatter} />
+              <MedianVsMissingness dataset={dataset} rows={bundle.scatter} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples} />
             </PlotCard>
           </section>
         </>

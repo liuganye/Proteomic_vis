@@ -128,3 +128,16 @@ class DatasetSummary(Model):
     organism_counts: dict[str, int]
     source_files: list[str]
     warnings: list[str]
+
+
+class QCMatrixRow(Model):
+    protein_id: str
+    gene: str | None
+    description: str
+    values: list[float | None]
+
+
+class QCMatrix(Model):
+    samples: list[Sample]
+    proteins: list[QCMatrixRow]
+    missing_policy: str = "zero or blank -> null; no imputation"

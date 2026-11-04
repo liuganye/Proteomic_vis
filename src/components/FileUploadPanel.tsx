@@ -6,6 +6,7 @@ import type { LoadState } from "@/lib/types";
 interface Props {
   state: LoadState;
   onLoadMock: () => void;
+  onLoadReal: () => void;
   onLoadFiles: (protein: File, annotation?: File | null) => void;
   onClear: () => void;
 }
@@ -13,6 +14,7 @@ interface Props {
 export function FileUploadPanel({
   state,
   onLoadMock,
+  onLoadReal,
   onLoadFiles,
   onClear,
 }: Props) {
@@ -47,7 +49,7 @@ export function FileUploadPanel({
   }, [proteinFile, annFile, loading, onLoadFiles]);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="min-w-0 break-words rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">
         Data input
       </h2>
@@ -87,7 +89,7 @@ export function FileUploadPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
+        <label className="block min-w-0 text-sm">
           <span className="mb-1 block font-medium text-slate-700">
             combined_protein.tsv
           </span>
@@ -106,7 +108,7 @@ export function FileUploadPanel({
             </p>
           )}
         </label>
-        <label className="block text-sm">
+        <label className="block min-w-0 text-sm">
           <span className="mb-1 block font-medium text-slate-700">
             experiment_annotation.tsv{" "}
             <span className="font-normal text-slate-400">(optional)</span>
@@ -126,6 +128,7 @@ export function FileUploadPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" disabled={loading} onClick={onLoadReal} className="rounded-md bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Load real dataset</button>
         <button
           type="button"
           disabled={loading || !proteinFile}

@@ -11,11 +11,15 @@ import {
   ZAxis,
 } from "recharts";
 import { medianVsMissingness } from "@/lib/stats";
-import type { FragPipeDataset } from "@/lib/types";
+import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 const CONDITION_COLORS: Record<string, string> = {
   Human: "#0f766e",
   QC: "#b45309",
+  Condition_A: "#2563eb",
+  Condition_B: "#7c3aed",
+  Ecoli: "#be123c",
+  Yeast: "#4d7c0f",
   Unknown: "#64748b",
 };
 
@@ -24,10 +28,12 @@ type ScatterRow = ReturnType<typeof medianVsMissingness>[number];
 export function MedianVsMissingness({
   dataset,
   rows,
+  selectedSamples,
+  onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   rows?: ScatterRow[];
-}) {
+} & SampleSelectionProps) {
   const data = rows ?? medianVsMissingness(dataset);
   const byCondition = new Map<string, typeof data>();
   for (const row of data) {
@@ -47,8 +53,8 @@ export function MedianVsMissingness({
         </h3>
         <p className="text-sm text-slate-600">
           Project-specific QC: each sample plotted by % MaxLFQ missing (x) and
-          median log<sub>10</sub> MaxLFQ (y). Upper-left samples (high missing,
-          low median) often flag under-loading or dropout.
+          median log<sub>10</sub> MaxLFQ (y). Compare samples within suitable
+          experimental groups; composition can affect both measures.
         </p>
       </header>
       <div className="h-80 w-full">
@@ -106,6 +112,17 @@ export function MedianVsMissingness({
                 name={condition}
                 data={rowsForCond}
                 fill={CONDITION_COLORS[condition] ?? CONDITION_COLORS.Unknown}
+                isAnimationActive={false}
+                shape={(props: unknown) => {
+                  const { cx, cy, fill, payload } = props as { cx: number; cy: number; fill: string; payload: ScatterRow };
+                  const selected = selectedSamples.includes(payload.sample);
+                  return <circle cx={cx} cy={cy} r={selected ? 7 : 5} fill={fill} stroke={selected ? "#0f172a" : "white"} strokeWidth={selected ? 2.5 : 0.5}
+                    role="button" tabIndex={0} aria-label={`Select sample ${payload.sample} in median chart`} aria-pressed={selected} data-sample={payload.sample}
+                    className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900"
+                    onClick={() => onSelectSamples([payload.sample])} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSamples([payload.sample]); } }}>
+                    <title>{payload.sample}: {payload.missingPct}% missing, median {payload.medianLog10.toFixed(2)}</title>
+                  </circle>;
+                }}
               />
             ))}
           </ScatterChart>

@@ -1,5 +1,10 @@
 export type SectionId = "qc" | "downstream";
 
+export type SampleSelectionProps = {
+  selectedSamples: string[];
+  onSelectSamples: (samples: string[]) => void;
+};
+
 /** Conventional FragPipe Analyst–style QC plots */
 export type QcConventionalPlotId =
   | "missingness"
@@ -59,7 +64,7 @@ export interface FragPipeDataset {
   maxlfqColumns: string[];
   contrasts: string[];
   annotation: ExperimentAnnotation[];
-  source: "mock" | "upload";
+  source: "mock" | "upload" | "real";
   proteinFileName?: string;
   annotationFileName?: string;
 }
