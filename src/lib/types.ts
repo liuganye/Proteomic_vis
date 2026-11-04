@@ -71,6 +71,8 @@ export interface QcConclusion {
 export interface ExperimentAnnotation {
   file: string;
   sample: string;
+  /** Optional FragPipe `sample_name` column (alias for matching MaxLFQ). */
+  sampleName?: string;
   condition: string;
   replicate: string;
 }
@@ -97,6 +99,11 @@ export interface FragPipeDataset {
   source: "mock" | "upload";
   proteinFileName?: string;
   annotationFileName?: string;
+  /**
+   * Set when experiment_annotation sample IDs could not be matched to
+   * MaxLFQ column prefixes and groups were inferred from intensity headers.
+   */
+  annotationWarning?: string;
 }
 
 export interface LoadState {
@@ -117,4 +124,6 @@ export interface VolcanoPoint {
   negLog10AdjP: number;
   significant: boolean;
   direction: "up" | "down" | "ns";
+  /** From combined_protein `Protein Probability` when present. */
+  proteinProbability?: number | null;
 }

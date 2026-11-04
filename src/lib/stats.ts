@@ -312,17 +312,29 @@ function conditionMap(annotation: ExperimentAnnotation[]) {
   return m;
 }
 
-/** Unique condition/group labels from experiment_annotation (stable order). */
+/** Unique condition/group labels that have ≥1 MaxLFQ-mapped sample. */
 export function annotationGroups(dataset: FragPipeDataset): string[] {
+  const sampleSet = new Set(dataset.samples);
   const seen = new Set<string>();
   const groups: string[] = [];
   for (const a of dataset.annotation) {
     const g = (a.condition ?? "").trim();
     if (!g || seen.has(g)) continue;
+    if (!sampleSet.has(a.sample)) continue;
     seen.add(g);
     groups.push(g);
   }
   return groups;
+}
+
+/** How many MaxLFQ samples resolve to each annotation group. */
+export function groupSampleCounts(
+  dataset: FragPipeDataset,
+): { group: string; n: number; samples: string[] }[] {
+  return annotationGroups(dataset).map((group) => {
+    const samples = samplesForGroup(dataset, group);
+    return { group, n: samples.length, samples };
+  });
 }
 
 /** Prefer Human vs QC when both exist; otherwise the first two groups. */
@@ -354,13 +366,25 @@ export function matchLimmaContrast(
   if (!groupA || !groupB || groupA === groupB) return null;
   const a = normalizeContrastToken(groupA);
   const b = normalizeContrastToken(groupB);
+  if (!a || !b || a === b) return null;
+
   for (const c of contrasts) {
-    const parts = c.split(/\s*_vs_\s*|\s+vs\s+/i);
-    if (parts.length !== 2) continue;
-    const left = normalizeContrastToken(parts[0]);
-    const right = normalizeContrastToken(parts[1]);
-    if (left === a && right === b) return { contrast: c, flip: false };
-    if (left === b && right === a) return { contrast: c, flip: true };
+    const parts = c.split(/\s*_vs_\s*|\s+vs\s+|\s+versus\s+/i);
+    if (parts.length === 2) {
+      const left = normalizeContrastToken(parts[0]);
+      const right = normalizeContrastToken(parts[1]);
+      if (left === a && right === b) return { contrast: c, flip: false };
+      if (left === b && right === a) return { contrast: c, flip: true };
+    }
+    // FragPipe sometimes concatenates without a separator after stripping
+    // punctuation: "CTRKvsFLU" / "ctrkflu" style tokens.
+    const n = normalizeContrastToken(c);
+    if (n === `${a}vs${b}` || n === `${a}${b}`) {
+      return { contrast: c, flip: false };
+    }
+    if (n === `${b}vs${a}` || n === `${b}${a}`) {
+      return { contrast: c, flip: true };
+    }
   }
   // Fallback: loose "human…qc" style substring match for legacy labels
   const loose = contrasts.find((c) => {
@@ -419,6 +443,7 @@ export function buildVolcano(
       negLog10AdjP: -Math.log10(adjP),
       significant,
       direction,
+      proteinProbability: p.proteinProbability,
     });
   }
   return points;
@@ -426,15 +451,28 @@ export function buildVolcano(
 
 function samplesForGroup(dataset: FragPipeDataset, group: string): string[] {
   const want = group.trim().toLowerCase();
-  return dataset.annotation
-    .filter((a) => a.condition.trim().toLowerCase() === want)
-    .map((a) => a.sample)
-    .filter((s) => dataset.samples.includes(s));
+  const sampleSet = new Set(dataset.samples);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of dataset.annotation) {
+    if (a.condition.trim().toLowerCase() !== want) continue;
+    const s = a.sample;
+    if (!sampleSet.has(s) || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function meanOrZero(vals: number[]): number {
+  if (vals.length === 0) return 0;
+  return vals.reduce((x, y) => x + y, 0) / vals.length;
 }
 
 /**
  * Approximate DE for any two annotation groups from MaxLFQ group means
  * (demo only when limma adj-p columns are absent for that contrast).
+ * Proteins detected in only one group are kept (missing group mean = 0).
  */
 export function approximateGroupContrast(
   dataset: FragPipeDataset,
@@ -453,9 +491,10 @@ export function approximateGroupContrast(
   for (const p of dataset.proteins) {
     const aVals = aSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
     const bVals = bSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
-    if (aVals.length === 0 || bVals.length === 0) continue;
-    const aMean = aVals.reduce((x, y) => x + y, 0) / aVals.length;
-    const bMean = bVals.reduce((x, y) => x + y, 0) / bVals.length;
+    // Keep proteins observed in at least one of the two groups.
+    if (aVals.length === 0 && bVals.length === 0) continue;
+    const aMean = meanOrZero(aVals);
+    const bMean = meanOrZero(bVals);
     const log2fc = Math.log2((aMean + 1) / (bMean + 1));
     const t = Math.abs(log2fc) / 0.4;
     // Deterministic pseudo-p from effect size (demo only; not a real DE test)
@@ -472,6 +511,7 @@ export function approximateGroupContrast(
       negLog10AdjP: -Math.log10(adjP),
       significant,
       direction: !significant ? "ns" : log2fc > 0 ? "up" : "down",
+      proteinProbability: p.proteinProbability,
     });
   }
   return {
@@ -505,6 +545,8 @@ export function volcanoForGroups(
   contrastLabel: string;
   approximated: boolean;
   ready: boolean;
+  /** Why limma/MaxLFQ mapping failed when points are empty. */
+  emptyReason?: string;
 } {
   const canCompare = Boolean(groupA && groupB && groupA !== groupB);
   if (!canCompare) {
@@ -517,18 +559,25 @@ export function volcanoForGroups(
   }
   const matched = matchLimmaContrast(dataset.contrasts, groupA, groupB);
   if (matched) {
+    const points = buildVolcano(dataset, matched.contrast, {
+      ...opts,
+      flipLog2fc: matched.flip,
+    });
     return {
-      points: buildVolcano(dataset, matched.contrast, {
-        ...opts,
-        flipLog2fc: matched.flip,
-      }),
+      points,
       contrastLabel: matched.flip
         ? `${groupA} vs ${groupB} (from ${matched.contrast}, FC flipped)`
         : matched.contrast,
       approximated: false,
       ready: true,
+      emptyReason:
+        points.length === 0
+          ? `Limma contrast "${matched.contrast}" matched, but no proteins had both log2FC and adjusted p-value.`
+          : undefined,
     };
   }
+  const aSamples = samplesForGroup(dataset, groupA);
+  const bSamples = samplesForGroup(dataset, groupB);
   const approx = approximateGroupContrast(dataset, groupA, groupB, opts);
   if (!approx) {
     return {
@@ -536,6 +585,10 @@ export function volcanoForGroups(
       contrastLabel: `${groupA} vs ${groupB}`,
       approximated: true,
       ready: true,
+      emptyReason:
+        `No limma columns for ${groupA} vs ${groupB}, and MaxLFQ mapping found ` +
+        `${aSamples.length} sample(s) in ${groupA} and ${bSamples.length} in ${groupB}. ` +
+        `Annotation \`sample\` must match MaxLFQ prefixes.`,
     };
   }
   return {
@@ -543,6 +596,10 @@ export function volcanoForGroups(
     contrastLabel: approx.contrast,
     approximated: true,
     ready: true,
+    emptyReason:
+      approx.points.length === 0
+        ? `Mapped ${aSamples.length} / ${bSamples.length} MaxLFQ samples for ${groupA} / ${groupB}, but no proteins had intensity in either group.`
+        : undefined,
   };
 }
 

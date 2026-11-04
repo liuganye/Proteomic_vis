@@ -52,7 +52,7 @@ export function DownstreamPanel({ dataset, module }: Props) {
 
   const canCompare = Boolean(groupA && groupB && groupA !== groupB);
 
-  const { points, contrastLabel, approximated, ready } = useMemo(
+  const { points, contrastLabel, approximated, ready, emptyReason } = useMemo(
     () =>
       volcanoForGroups(dataset, groupA, groupB, {
         log2fcThreshold: fcThr,
@@ -147,11 +147,18 @@ export function DownstreamPanel({ dataset, module }: Props) {
               <code className="rounded bg-slate-100 px-1">
                 experiment_annotation.tsv
               </code>{" "}
-              condition/group column. Results follow the selected contrast.
+              condition/group column (aligned to MaxLFQ sample prefixes). Results
+              follow the selected contrast; Protein Probability is shown when
+              present in the protein table.
             </p>
           </div>
           {groupControls}
         </div>
+        {dataset.annotationWarning && (
+          <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {dataset.annotationWarning}
+          </p>
+        )}
         {!canCompare ? (
           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
             Select two different groups (Group A and Group B) to compare before
@@ -174,18 +181,26 @@ export function DownstreamPanel({ dataset, module }: Props) {
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Volcano plot</h3>
           <p className="text-sm text-slate-600">
-            Choose any two annotation groups. Uses limma adjusted p-value and
-            log<sub>2</sub> fold change when that contrast exists; otherwise
-            approximates from MaxLFQ group means.
+            Choose any two annotation groups. MaxLFQ columns are autodetected
+            (`{"{sample} MaxLFQ Intensity"}`) and mapped to groups via sample ID,
+            Control↔CTRK-style synonyms, or residual size matching. Uses limma
+            when that contrast exists; otherwise approximates from MaxLFQ group
+            means.
           </p>
         </div>
         {groupControls}
       </header>
 
+      {dataset.annotationWarning && (
+        <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {dataset.annotationWarning}
+        </p>
+      )}
+
       {!canCompare || !ready ? (
         <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
           {groups.length < 2
-            ? "Need at least two condition/group labels in experiment_annotation.tsv to build a contrast."
+            ? "Need at least two condition/group labels that map to MaxLFQ samples to build a contrast."
             : "Select two different groups (Group A ≠ Group B) to enable the comparison."}
         </p>
       ) : (
@@ -200,8 +215,9 @@ export function DownstreamPanel({ dataset, module }: Props) {
 
           {points.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
-              No volcano points for {groupA} vs {groupB}. Need matching log2FC +
-              adj.P columns, or MaxLFQ intensities for samples in both groups.
+              No volcano points for {groupA} vs {groupB}.{" "}
+              {emptyReason ??
+                "Need matching log2FC + adj.P columns, or MaxLFQ intensities for samples in both groups."}
             </p>
           ) : (
             <>
