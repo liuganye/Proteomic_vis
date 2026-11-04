@@ -25,3 +25,15 @@ def test_real_dataset_connects_the_api_to_known_source_results():
         assert client.get("/api/v1/proteins/O00148").json()["structure_status"] == "local_available"
         assert client.get("/api/v1/structures/8IJU").status_code == 200
         assert len(client.get("/api/v1/qc/samples").json()["samples"]) == 45
+        matrix = client.get("/api/v1/qc/matrix").json()
+        assert len(matrix["proteins"]) == 9369
+        assert len(matrix["samples"]) == 45
+        row = next(p for p in matrix["proteins"] if p["protein_id"] == "O00148")
+        points = client.get("/api/v1/proteins/O00148/abundance").json()["points"]
+        assert [s["sample_id"] for s in matrix["samples"]] == [p["sample_id"] for p in points]
+        assert row["values"] == [p["intensity"] for p in points]
+        qc = client.get("/api/v1/qc/samples").json()["samples"]
+        for index, sample in enumerate(qc):
+            assert sample["detected_count"] == sum(
+                p["values"][index] is not None for p in matrix["proteins"]
+            )

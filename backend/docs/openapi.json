@@ -606,6 +606,37 @@
         }
       }
     },
+    "/api/v1/qc/matrix": {
+      "get": {
+        "tags": [
+          "quality-control"
+        ],
+        "summary": "Matrix",
+        "operationId": "matrix_api_v1_qc_matrix_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QCMatrix"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/structures/{pdb_id}": {
       "get": {
         "tags": [
@@ -1243,6 +1274,80 @@
           "structure_status"
         ],
         "title": "ProteinDetail"
+      },
+      "QCMatrix": {
+        "properties": {
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/Sample"
+            },
+            "type": "array",
+            "title": "Samples"
+          },
+          "proteins": {
+            "items": {
+              "$ref": "#/components/schemas/QCMatrixRow"
+            },
+            "type": "array",
+            "title": "Proteins"
+          },
+          "missing_policy": {
+            "type": "string",
+            "title": "Missing Policy",
+            "default": "zero or blank -> null; no imputation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "samples",
+          "proteins"
+        ],
+        "title": "QCMatrix"
+      },
+      "QCMatrixRow": {
+        "properties": {
+          "protein_id": {
+            "type": "string",
+            "title": "Protein Id"
+          },
+          "gene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein_id",
+          "gene",
+          "description",
+          "values"
+        ],
+        "title": "QCMatrixRow"
       },
       "QCResponse": {
         "properties": {

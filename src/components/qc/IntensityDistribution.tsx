@@ -15,45 +15,28 @@ import {
   conditionColor,
   groupQcStats,
   intensityBoxBySample,
-  intensityLong,
+  intensityHistogram,
   missingnessBySample,
 } from "@/lib/stats";
-import type { FragPipeDataset } from "@/lib/types";
+import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 type BoxRow = ReturnType<typeof intensityBoxBySample>[number];
-
-function buildHistogram(values: number[], bins = 30) {
-  if (values.length === 0) return [];
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const width = (max - min) / bins || 1;
-  const counts = Array.from({ length: bins }, (_, i) => ({
-    bin: min + (i + 0.5) * width,
-    label: (min + i * width).toFixed(2),
-    count: 0,
-  }));
-  for (const v of values) {
-    let idx = Math.floor((v - min) / width);
-    if (idx >= bins) idx = bins - 1;
-    if (idx < 0) idx = 0;
-    counts[idx].count += 1;
-  }
-  return counts;
-}
 
 export function IntensityDistribution({
   dataset,
   boxes: precomputedBoxes,
   groups: precomputedGroups,
   colorMap: colorMapProp,
+  selectedSamples,
+  onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   boxes?: BoxRow[];
   groups?: ReturnType<typeof groupQcStats>;
   colorMap?: Record<string, string>;
-}) {
-  const long = intensityLong(dataset, { log10: true, maxPoints: 20000 });
-  const hist = buildHistogram(long.map((d) => d.value));
+} & SampleSelectionProps) {
+  const histogram = useMemo(() => intensityHistogram(dataset), [dataset]);
+  const hist = histogram.bins;
   const boxes = precomputedBoxes ?? intensityBoxBySample(dataset);
   const groups = useMemo(() => {
     if (precomputedGroups) return precomputedGroups;
@@ -70,34 +53,45 @@ export function IntensityDistribution({
             MaxLFQ intensity distribution
           </h3>
           <p className="text-sm text-slate-600">
-            Histogram of log<sub>10</sub>(MaxLFQ) across all non-zero
-            protein×sample observations. Zeros are excluded (missing).
+            Histogram of log<sub>10</sub>(MaxLFQ) across all positive, finite
+            protein×sample observations. Zero and blank values are missing.
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-700" data-testid="histogram-total">
+            {histogram.total.toLocaleString()} observations · {hist.length} bins · no sampling
           </p>
         </header>
+        {histogram.total === 0 ? <p className="text-sm text-slate-600">No positive, finite intensities to plot.</p> :
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={hist} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+            <BarChart data={hist} barCategoryGap={0} margin={{ top: 8, right: 12, left: 12, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
-                dataKey="label"
+                dataKey="midpoint"
+                tickFormatter={(value: number) => value.toFixed(2)}
                 tick={{ fontSize: 10 }}
                 interval="preserveStartEnd"
                 label={{
                   value: "log10 MaxLFQ",
                   position: "insideBottom",
-                  offset: -2,
+                  offset: -12,
                   style: { fontSize: 12, fill: "#64748b" },
                 }}
               />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis width={65} allowDecimals={false} tick={{ fontSize: 12 }} label={{ value: "Observations", angle: -90, position: "insideLeft", offset: -5, style: { fontSize: 11 } }} />
               <Tooltip
-                formatter={(value) => [value, "Count"]}
-                labelFormatter={(l) => `bin ~ ${l}`}
+                content={({ active, payload }) => {
+                  const bin = payload?.[0]?.payload as (typeof hist)[number] | undefined;
+                  if (!active || !bin) return null;
+                  return <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-800 shadow-sm">
+                    <p>log₁₀ MaxLFQ: [{bin.lower.toFixed(3)}, {bin.upper.toFixed(3)}{bin.upper === hist[hist.length - 1].upper ? "]" : ")"}</p>
+                    <p>{bin.count.toLocaleString()} observations</p>
+                  </div>;
+                }}
               />
               <Bar dataKey="count" fill="#0f766e" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </div>}
       </div>
 
       <div>
@@ -156,7 +150,8 @@ export function IntensityDistribution({
           </h3>
           <p className="text-sm text-slate-600">
             Quartile summary (min / Q1 / median / Q3 / max) of positive MaxLFQ
-            values per sample, ordered by annotation group.
+            values per sample, ordered by annotation group. Select a sample row to highlight it across views;
+            the histogram above continues to summarize all observations.
           </p>
         </header>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -173,9 +168,9 @@ export function IntensityDistribution({
             </thead>
             <tbody>
               {boxes.map((b) => (
-                <tr key={b.sample} className="border-t border-slate-100">
+                <tr key={b.sample} className={`border-t border-slate-100 ${selectedSamples.includes(b.sample) ? "bg-teal-50" : ""}`} data-selected={selectedSamples.includes(b.sample)}>
                   <td className="px-3 py-2 font-medium text-slate-900">
-                    {b.sample}
+                    <button type="button" aria-label={`Select sample ${b.sample} in intensity summary`} aria-pressed={selectedSamples.includes(b.sample)} onClick={() => onSelectSamples([b.sample])} className="rounded underline underline-offset-4 focus-visible:outline-teal-700">{b.sample}</button>
                   </td>
                   <td className="px-3 py-2 text-slate-700">
                     <span className="inline-flex items-center gap-2">

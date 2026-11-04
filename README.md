@@ -2,9 +2,11 @@
 
 A local, read-only demonstration for exploring a fixed proteomics dataset. Search or select a protein to connect Human − QC differential results, observed abundance, STRING associations, annotations, and available local structures.
 
+[中文说明：数据来源、网页功能与使用边界](./WEB_GUIDE.zh-CN.md)
+
 ## Contents
 
-- Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes upload/mock QC (summary→jump, Conventional/Custom) and RealExplore.
+- Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes real-data QC and RealExplore, plus separate upload/mock QC.
 - `supplementary_files/`: Plan G notebook, CSVs/TSVs, and plots.
 - `backend/`: FastAPI service, tests, and OpenAPI contract.
 - `data/raw/`: original protein table and sample annotation.
@@ -57,14 +59,20 @@ Open <http://localhost:43147>. Windows was used for the validation described bel
 
 ## Demo walkthrough
 
-1. Open **Real data explore**. The initial protein is O00148 / DDX39A; its locally packaged structure is 8IJU.
-2. Search `P32610` or select a volcano point. The detail and observed sample abundance panels follow the focused Protein ID.
+The top **Focused protein** selector opens a searchable dropdown with **Current candidates** and **All proteins** scopes. Candidates follow the results table filters and sort; the full dataset is fetched 20 choices at a time. Each choice shows its gene, protein ID and organism, and the current focus is marked **Selected**. Searching this dropdown does not change the result filters.
+
+QC also supports session-local custom scatter, bar and histogram plots from sample metrics. Shared sample selection applies to the built-in QC charts. Upload/mock Downstream retains its Group A / Group B comparison controls and sample-to-annotation mapping; real-data Downstream uses the imported Human − QC results.
+
+1. QC automatically loads the backend HYE dataset. Select a bar, scatter point, or intensity-summary sample; a correlation cell selects both samples. Open **Real data explore** to see their abundance values or missing status. Selecting an abundance point updates the QC selection too. The initial protein is O00148 / DDX39A; its locally packaged structure is 8IJU.
+2. Use **Box select** to drag a candidate region in the volcano. The real results table shows the intersection of that region, its search, and optional threshold filter. It supports sorting and pagination. For a reproducible single candidate, enter log₂FC bounds −3 to −1 and −log₁₀ adjusted p bounds 7 to 10 under **Set selection bounds with keyboard**: this selects `P32610 / VMA8`. Inspect its table row to update all protein evidence panels. **Inspect points** enables individual point selection.
+   Inside **Focused protein**, use **Switch focused protein** to search all real proteins without changing candidate filters. **Previous candidate / Next candidate** follow the current table order across pages and show **Candidate X / N**. A protein outside the filters is labelled **Outside candidate set**; **Start with first candidate** resumes the filtered list. Gene names can match multiple species, so check the protein ID and organism before selecting.
 3. Select a STRING network node to focus it; adjust the minimum confidence, zoom, or reveal neighbor-to-neighbor associations. A notice appears if the 29-neighbor display limit truncates results. The neighbor list is also keyboard accessible.
 4. Drag the local structure's Cα trace to rotate; use zoom and reset controls. Referenced structures without local coordinates are labelled separately.
+5. QC, Explore and real-data Downstream retain samples, the focused protein and candidate filters while switching views. **Clear box selection** keeps search and threshold filtering; **Clear table filters** restores all tested results. **Clear sample selection** removes sample highlights. Refreshing or replacing the dataset resets selections. QC still summarizes all proteins; sample selection never recomputes the contrast. Mock or uploaded data remains separate.
 
 ## Verification
 
-From `backend/`, use the venv Python to run `python -m protein_viz.cli validate-data`, `python -m pytest -q` and `python -m ruff check src tests` (on Windows, replace `python` with `.\.venv\Scripts\python.exe`; on macOS/Linux use `.venv/bin/python`). From the repository root, run `npm run build`.
+From `backend/`, use the venv Python to run `python -m protein_viz.cli validate-data`, `python -m pytest -q` and `python -m ruff check src tests` (on Windows, replace `python` with `.\.venv\Scripts\python.exe`; on macOS/Linux use `.venv/bin/python`). From the repository root, run `npm test` for visualization calculations and real snapshot regression checks, then `npm run build` for production compilation and TypeScript. The [Chinese guide](./WEB_GUIDE.zh-CN.md#8-回归检查与完整演示路线) records the browser walkthrough and expected evidence values.
 
 The data check should report 9,369 proteins, 45 samples, 4,375 differential results, and four locally available structures. At adjusted p < 0.05 and |log2FC| > 0.7, the imported Human − QC result has 33 significant proteins. These are checks of the included snapshot, not a reanalysis.
 
@@ -75,6 +83,6 @@ The backend defaults to the repository's `data/` directory. To use another datas
 - Human − QC statistics are imported from an existing limma table; the original calculation has not been independently reproduced. Threshold changes filter existing values and do not recalculate BH adjustment.
 - Sample group labels are inferred from names and remain unreviewed; replicate types are unknown. Zero/blank intensity is treated as missing, with no imputation in the abundance view.
 - STRING data is an incomplete, chunked functional-association export; confidence is not binding strength. Species are retained. The structure view is a simplified Cα trace, not a full molecular viewer.
-- The original QC/upload prototype remains separate from Explore. Volcano box selection, raw-p mode and a validated full P0 workflow remain future work.
+- QC uses descriptive plots for the real dataset; inferred groups need review, and differences across groups are not automatic quality verdicts. The separate upload/mock prototype is not connected to Explore. Raw-p mode, candidate export, persistent analysis sessions and independently validated statistical reanalysis remain future work.
 - This is a local research demo; review security and data permissions before exposing it publicly.
 - Confirm the right to redistribute the included input, derived data and third-party structure files before publishing the repository or sharing it beyond the team. No data license is asserted here.
