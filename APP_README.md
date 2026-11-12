@@ -60,6 +60,7 @@ Upload those files via the Data input panel (the browser cannot read host paths 
 
 1. **Volcano** — pick any two annotation groups (defaults to Human vs QC when present); uses limma columns when available, else MaxLFQ-mean approx; adjustable |log2FC| and adj.P thresholds
 2. **Results table** — ranked by adjusted p-value, filterable, paginated
+3. **GO enrichment** — horizontal bar chart of enriched Gene Ontology terms among significant (or up/down) proteins for the current contrast; BP / MF / CC filter; rank by −log10(adj.P) or fold enrichment. Client-side hypergeometric test against a **bundled demo gene→GO map** (covers mock genes + common pathway symbols). Not a full GOA/UniProt database — unmapped genes are listed under the plot.
 
 If adjusted p-value columns are missing for the selected pair, Downstream shows an **approximate** MaxLFQ-mean volcano (demo only — not limma). QC plots color and summarize **all** condition/group labels from the annotation.
 

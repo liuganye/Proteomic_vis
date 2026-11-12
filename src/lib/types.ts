@@ -54,7 +54,7 @@ export interface UserCustomPlotSpec {
 /** @deprecated Prefer QcPlotId; kept for nav compatibility */
 export type QcModuleId = QcPlotId;
 
-export type DownstreamModuleId = "volcano" | "results";
+export type DownstreamModuleId = "volcano" | "results" | "go";
 
 export type ModuleId = QcModuleId | DownstreamModuleId;
 

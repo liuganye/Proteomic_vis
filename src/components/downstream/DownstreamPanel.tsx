@@ -22,6 +22,7 @@ import type {
   FragPipeDataset,
   VolcanoPoint,
 } from "@/lib/types";
+import { GoEnrichmentPlot } from "./GoEnrichmentPlot";
 import { ResultsTable } from "./ResultsTable";
 
 const COLORS = {
@@ -167,6 +168,42 @@ export function DownstreamPanel({ dataset, module }: Props) {
         ) : (
           <ResultsTable points={points} contrastLabel={contrastLabel} />
         )}
+      </div>
+    );
+  }
+
+  if (module === "go") {
+    return (
+      <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm text-slate-600">
+              Enrich significant proteins from the current Group A vs Group B
+              contrast (same thresholds as Volcano). Gene symbols from the
+              protein table are matched to a bundled demo GO mapping.
+            </p>
+          </div>
+          {groupControls}
+        </div>
+        {dataset.annotationWarning && (
+          <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {dataset.annotationWarning}
+          </p>
+        )}
+        {approximated && canCompare && ready && (
+          <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No limma adjusted p-value columns for {groupA} vs {groupB}.
+            Significant proteins come from the approximate MaxLFQ volcano (demo
+            only).
+          </p>
+        )}
+        <GoEnrichmentPlot
+          points={points}
+          contrastLabel={contrastLabel}
+          canCompare={canCompare}
+          ready={ready}
+          groupsAvailable={groups.length}
+        />
       </div>
     );
   }
