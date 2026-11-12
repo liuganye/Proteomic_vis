@@ -57,6 +57,11 @@ const DOWNSTREAM_MODULES: {
     label: "Results table",
     blurb: "Ranked adj.P / log2FC for contrast",
   },
+  {
+    id: "go",
+    label: "GO enrichment",
+    blurb: "Bar chart of enriched GO terms",
+  },
 ];
 
 export function AppShell() {
@@ -211,7 +216,15 @@ export function AppShell() {
                       selected={dsModule === m.id}
                       onClick={() => {
                         setDsModule(m.id);
-                        document.getElementById(m.id === "results" ? "real-results" : "real-volcano")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        if (m.id === "results") {
+                          document
+                            .getElementById("real-results")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        } else if (m.id === "volcano") {
+                          document
+                            .getElementById("real-volcano")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
                       }}
                     />
                   </li>
