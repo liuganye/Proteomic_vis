@@ -10,7 +10,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { intensityBoxBySample, intensityHistogram } from "@/lib/stats";
+import {
+  buildConditionColorMap,
+  conditionColor,
+  groupQcStats,
+  intensityBoxBySample,
+  intensityHistogram,
+  missingnessBySample,
+} from "@/lib/stats";
 import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 type BoxRow = ReturnType<typeof intensityBoxBySample>[number];
@@ -18,15 +25,25 @@ type BoxRow = ReturnType<typeof intensityBoxBySample>[number];
 export function IntensityDistribution({
   dataset,
   boxes: precomputedBoxes,
+  groups: precomputedGroups,
+  colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   boxes?: BoxRow[];
+  groups?: ReturnType<typeof groupQcStats>;
+  colorMap?: Record<string, string>;
 } & SampleSelectionProps) {
   const histogram = useMemo(() => intensityHistogram(dataset), [dataset]);
   const hist = histogram.bins;
   const boxes = precomputedBoxes ?? intensityBoxBySample(dataset);
+  const groups = useMemo(() => {
+    if (precomputedGroups) return precomputedGroups;
+    return groupQcStats(missingnessBySample(dataset), boxes);
+  }, [precomputedGroups, dataset, boxes]);
+  const colorMap =
+    colorMapProp ?? buildConditionColorMap(groups.map((g) => g.condition));
 
   return (
     <div className="space-y-8">
@@ -80,11 +97,60 @@ export function IntensityDistribution({
       <div>
         <header className="mb-3">
           <h3 className="text-lg font-semibold text-slate-900">
+            Per-group intensity summary
+          </h3>
+          <p className="text-sm text-slate-600">
+            Mean missingness and mean of per-sample median log<sub>10</sub>{" "}
+            MaxLFQ for every condition/group in the annotation (
+            {groups.length} group{groups.length === 1 ? "" : "s"}).
+          </p>
+        </header>
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Group</th>
+                <th className="px-3 py-2">n samples</th>
+                <th className="px-3 py-2">Mean missing %</th>
+                <th className="px-3 py-2">Mean median log₁₀</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <tr key={g.condition} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-sm"
+                        style={{
+                          background: conditionColor(g.condition, colorMap),
+                        }}
+                      />
+                      {g.condition}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">{g.nSamples}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {g.meanMissingPct.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {g.medianOfMedians.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <header className="mb-3">
+          <h3 className="text-lg font-semibold text-slate-900">
             Per-sample log<sub>10</sub> MaxLFQ summary
           </h3>
           <p className="text-sm text-slate-600">
             Quartile summary (min / Q1 / median / Q3 / max) of positive MaxLFQ
-            values per sample. Select a sample row to highlight it across views;
+            values per sample, ordered by annotation group. Select a sample row to highlight it across views;
             the histogram above continues to summarize all observations.
           </p>
         </header>
@@ -106,7 +172,17 @@ export function IntensityDistribution({
                   <td className="px-3 py-2 font-medium text-slate-900">
                     <button type="button" aria-label={`Select sample ${b.sample} in intensity summary`} aria-pressed={selectedSamples.includes(b.sample)} onClick={() => onSelectSamples([b.sample])} className="rounded underline underline-offset-4 focus-visible:outline-teal-700">{b.sample}</button>
                   </td>
-                  <td className="px-3 py-2 text-slate-700">{b.condition}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-sm"
+                        style={{
+                          background: conditionColor(b.condition, colorMap),
+                        }}
+                      />
+                      {b.condition}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 tabular-nums">{b.n}</td>
                   <td className="px-3 py-2 tabular-nums">
                     {b.median.toFixed(2)}

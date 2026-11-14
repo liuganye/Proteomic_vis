@@ -10,7 +10,7 @@ A local, read-only demonstration for exploring a fixed proteomics dataset. Searc
 
 The real-data interface has two pages: **QC** and **Downstream workspace**. Drag modules from the left library, move their title bars, and resize their bottom-right corners. Cards snap to a 12-column grid without overlapping. Click **Add** or use each card's **Layout** menu as alternatives. Layouts are saved in this browser; **Undo layout**, **Reset layout**, and **Lock layout** are available. Narrow screens stack cards while preserving desktop positions. Layout saving does not save the analysis session.
 
-Seven modules are available: volcano, results, sample abundance, protein details, STRING network, structure, and GO enrichment. **GO is currently a movable placeholder with a linked candidate count; annotations and enrichment computation are not connected and no GO result is claimed.** Mock/upload results remain separate from the real-data workspace.
+Seven modules are available: volcano, results, sample abundance, protein details, STRING network, structure, and GO enrichment. **Real-data GO is currently a movable placeholder with a linked candidate count; annotations and enrichment computation are not connected to this workspace and no real-data GO result is claimed.** Mock/upload results remain separate and retain main's GO enrichment bar chart based on the bundled demo mapping. QC retains session-local custom scatter, bar and histogram plots, and uploads retain group-comparison and annotation-mapping controls.
 
 ## Contents
 

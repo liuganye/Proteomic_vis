@@ -1,20 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { sampleCorrelationMatrix } from "@/lib/stats";
+import { useMemo, useState } from "react";
+import { buildConditionColorMap, conditionColor, sampleCorrelationMatrix } from "@/lib/stats";
 import { correlationColor, correlationTextColor } from "@/lib/visualization";
 import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 export function SampleCorrelation({
   dataset,
   matrix: precomputed,
+  colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   matrix?: ReturnType<typeof sampleCorrelationMatrix>;
+  colorMap?: Record<string, string>;
 } & SampleSelectionProps) {
-  const { samples, matrix } = precomputed ?? sampleCorrelationMatrix(dataset);
+  const { samples, matrix, conditions } = precomputed ?? sampleCorrelationMatrix(dataset);
+  const groups = useMemo(() => [...new Set(conditions)], [conditions]);
+  const colorMap = colorMapProp ?? buildConditionColorMap(groups);
   const [showValues, setShowValues] = useState(false);
   const [activeCell, setActiveCell] = useState(0);
 
@@ -27,10 +31,13 @@ export function SampleCorrelation({
         <p className="text-sm text-slate-600">
           Pairwise Pearson correlation of log<sub>10</sub>(MaxLFQ) across
           proteins observed in both samples. Zero and blank values are excluded;
-          different pairs can use different sets of proteins.
+          different pairs can use different sets of proteins. Samples are ordered by annotation group.
         </p>
       </header>
 
+      <ul className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600" aria-label="Sample groups">
+        {groups.map(group => <li key={group} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: conditionColor(group, colorMap) }} />{group}</li>)}
+      </ul>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-700">
         <div className="w-64 max-w-full" aria-label="Pearson r color scale: orange at minus one, neutral at zero, blue at plus one">
           <p className="mb-1 font-medium">Pearson r · full range</p>
@@ -46,14 +53,14 @@ export function SampleCorrelation({
           <thead>
             <tr>
               <th className="sticky left-0 top-0 z-30 bg-white p-1"><span className="sr-only">Sample</span></th>
-              {samples.map((s) => (
+              {samples.map((s, columnIndex) => (
                 <th
                   key={s}
                   scope="col"
                   className="sticky top-0 z-10 bg-white p-0 text-[10px] leading-none font-medium text-slate-600"
-                  title={s}
+                  title={`${s} (${conditions[columnIndex]})`}
                 >
-                  <button type="button" aria-label={`Select column sample ${s}`} aria-pressed={selectedSamples.includes(s)} onClick={() => onSelectSamples([s])} className={`inline-block max-h-32 truncate ${selectedSamples.includes(s) ? "bg-teal-100 font-bold text-slate-900" : ""}`} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{s}</button>
+                  <button type="button" aria-label={`Select column sample ${s}`} aria-pressed={selectedSamples.includes(s)} onClick={() => onSelectSamples([s])} className={`inline-block max-h-32 truncate ${selectedSamples.includes(s) ? "bg-teal-100 font-bold text-slate-900" : ""}`} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}><span aria-hidden="true" className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: conditionColor(conditions[columnIndex], colorMap) }} />{s}</button>
                 </th>
               ))}
             </tr>
@@ -61,8 +68,8 @@ export function SampleCorrelation({
           <tbody>
             {samples.map((row, i) => (
               <tr key={row}>
-                <th scope="row" className="sticky left-0 z-10 bg-white pr-2 text-right font-medium text-slate-700" title={row}>
-                  <button type="button" aria-label={`Select row sample ${row}`} aria-pressed={selectedSamples.includes(row)} onClick={() => onSelectSamples([row])} className={`block max-w-32 truncate ${selectedSamples.includes(row) ? "bg-teal-100 font-bold text-slate-900" : ""}`}>{row}</button>
+                <th scope="row" className="sticky left-0 z-10 bg-white pr-2 text-right font-medium text-slate-700" title={`${row} (${conditions[i]})`}>
+                  <button type="button" aria-label={`Select row sample ${row}`} aria-pressed={selectedSamples.includes(row)} onClick={() => onSelectSamples([row])} className={`block max-w-32 truncate ${selectedSamples.includes(row) ? "bg-teal-100 font-bold text-slate-900" : ""}`}><span aria-hidden="true" className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: conditionColor(conditions[i], colorMap) }} />{row}</button>
                 </th>
                 {samples.map((col, j) => {
                   const r = matrix[i][j];

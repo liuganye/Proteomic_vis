@@ -203,41 +203,48 @@ export function FileUploadPanel({
         </p>
       )}
       {state.status === "ready" && state.dataset && (
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-slate-500">Proteins</dt>
-            <dd className="font-semibold text-slate-900">
-              {state.dataset.proteins.length}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Samples</dt>
-            <dd className="font-semibold text-slate-900">
-              {state.dataset.samples.length}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Contrasts</dt>
-            <dd className="font-semibold text-slate-900">
-              {state.dataset.contrasts.length || "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Source</dt>
-            <dd className="font-semibold text-slate-900">
-              {state.dataset.source}
-            </dd>
-          </div>
-          <div className="col-span-2 sm:col-span-4">
-            <dt className="text-slate-500">Files</dt>
-            <dd className="truncate text-slate-800">
-              {state.dataset.proteinFileName}
-              {state.dataset.annotationFileName
-                ? ` · ${state.dataset.annotationFileName}`
-                : ""}
-            </dd>
-          </div>
-        </dl>
+        <>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-slate-500">Proteins</dt>
+              <dd className="font-semibold text-slate-900">
+                {state.dataset.proteins.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Samples</dt>
+              <dd className="font-semibold text-slate-900">
+                {state.dataset.samples.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Contrasts</dt>
+              <dd className="font-semibold text-slate-900">
+                {state.dataset.contrasts.length || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Source</dt>
+              <dd className="font-semibold text-slate-900">
+                {state.dataset.source}
+              </dd>
+            </div>
+            <div className="col-span-2 sm:col-span-4">
+              <dt className="text-slate-500">Files</dt>
+              <dd className="truncate text-slate-800">
+                {state.dataset.proteinFileName}
+                {state.dataset.annotationFileName
+                  ? ` · ${state.dataset.annotationFileName}`
+                  : ""}
+              </dd>
+            </div>
+          </dl>
+          {state.dataset.annotationWarning && (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {state.dataset.annotationWarning}
+            </p>
+          )}
+        </>
       )}
     </section>
   );

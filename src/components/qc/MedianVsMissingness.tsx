@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   CartesianGrid,
   ResponsiveContainer,
@@ -10,39 +11,38 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import { medianVsMissingness } from "@/lib/stats";
+import {
+  buildConditionColorMap,
+  conditionColor,
+  medianVsMissingness,
+} from "@/lib/stats";
 import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
-
-const CONDITION_COLORS: Record<string, string> = {
-  "Group A": "#0f766e",
-  "Group B": "#b45309",
-  Human: "#0f766e",
-  QC: "#b45309",
-  Condition_A: "#2563eb",
-  Condition_B: "#7c3aed",
-  Ecoli: "#be123c",
-  Yeast: "#4d7c0f",
-  Unknown: "#64748b",
-};
 
 type ScatterRow = ReturnType<typeof medianVsMissingness>[number];
 
 export function MedianVsMissingness({
   dataset,
   rows,
+  colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
 }: {
   dataset: FragPipeDataset;
   rows?: ScatterRow[];
+  colorMap?: Record<string, string>;
 } & SampleSelectionProps) {
   const data = rows ?? medianVsMissingness(dataset);
-  const byCondition = new Map<string, typeof data>();
-  for (const row of data) {
-    const list = byCondition.get(row.condition) ?? [];
-    list.push(row);
-    byCondition.set(row.condition, list);
-  }
+  const byCondition = useMemo(() => {
+    const map = new Map<string, ScatterRow[]>();
+    for (const row of data) {
+      const list = map.get(row.condition) ?? [];
+      list.push(row);
+      map.set(row.condition, list);
+    }
+    return map;
+  }, [data]);
+  const groups = [...byCondition.keys()];
+  const colorMap = colorMapProp ?? buildConditionColorMap(groups);
 
   return (
     <div>
@@ -113,7 +113,7 @@ export function MedianVsMissingness({
                 key={condition}
                 name={condition}
                 data={rowsForCond}
-                fill={CONDITION_COLORS[condition] ?? CONDITION_COLORS.Unknown}
+                fill={conditionColor(condition, colorMap)}
                 isAnimationActive={false}
                 shape={(props: unknown) => {
                   const { cx, cy, fill, payload } = props as { cx: number; cy: number; fill: string; payload: ScatterRow };
@@ -131,13 +131,11 @@ export function MedianVsMissingness({
         </ResponsiveContainer>
       </div>
       <ul className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
-        {[...byCondition.keys()].map((k) => (
+        {groups.map((k) => (
           <li key={k} className="flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{
-                background: CONDITION_COLORS[k] ?? CONDITION_COLORS.Unknown,
-              }}
+              style={{ background: conditionColor(k, colorMap) }}
             />
             {k}
           </li>
