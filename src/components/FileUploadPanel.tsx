@@ -54,7 +54,7 @@ export function FileUploadPanel({
         Data input
       </h2>
       <p className="mt-1 text-sm text-slate-600">
-        Upload FragPipe outputs or load built-in mock HYE-style data. Expects{" "}
+        Upload FragPipe outputs or load built-in synthetic Group A / Group B data. Expects{" "}
         <code className="rounded bg-slate-100 px-1 text-xs">
           combined_protein.tsv
         </code>{" "}
@@ -166,6 +166,13 @@ export function FileUploadPanel({
         )}
       </div>
 
+      {state.status === "ready" && state.dataset?.source === "mock" && (
+        <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">
+          Synthetic demo · 120 proteins · Group A: 4 samples (A_1–A_4) · Group B: 3 samples (B_1–B_3).
+          These are illustrative values, not a subset of the real dataset. QC checks all seven samples;
+          neither group is a quality-control group. Group A vs Group B statistics are for demonstration only.
+        </p>
+      )}
       {state.status === "idle" && (
         <p className="mt-3 text-sm text-slate-500">
           No data loaded yet. Use mock data for a quick demo, or upload your

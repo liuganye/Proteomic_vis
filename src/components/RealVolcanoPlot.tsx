@@ -6,7 +6,7 @@ import { VolcanoBrushInputs } from "./VolcanoBrushInputs";
 
 type Point = { protein_id: string; gene: string | null; log2_fc: number; adj_p: number };
 
-export function RealVolcanoPlot({ points, focus, onChoose, pCutoff, fcCutoff, setPCutoff, setFcCutoff, brush, onBrush, matchingIds, hasFilters }: {
+export function RealVolcanoPlot({ points, focus, onChoose, pCutoff, fcCutoff, setPCutoff, setFcCutoff, brush, onBrush, matchingIds, hasFilters, onViewResults }: {
   points: Point[];
   focus: string;
   onChoose: (id: string) => void;
@@ -18,6 +18,7 @@ export function RealVolcanoPlot({ points, focus, onChoose, pCutoff, fcCutoff, se
   onBrush: (bounds: BrushBounds | null) => void;
   matchingIds: Set<string>;
   hasFilters: boolean;
+  onViewResults?: () => void;
 }) {
   const { xMax, yMax, xTicks, yTicks } = volcanoAxes(points, pCutoff, fcCutoff);
   const left = 72, right = 738, top = 34, bottom = 330;
@@ -56,7 +57,7 @@ export function RealVolcanoPlot({ points, focus, onChoose, pCutoff, fcCutoff, se
       <button type="button" aria-pressed={!boxSelect} onClick={() => setBoxSelect(false)} className={`rounded border px-3 py-2 ${!boxSelect ? "bg-teal-800 text-white" : "border-slate-300"}`}>Inspect points</button>
       <button type="button" aria-pressed={boxSelect} onClick={() => setBoxSelect(true)} className={`rounded border px-3 py-2 ${boxSelect ? "bg-teal-800 text-white" : "border-slate-300"}`}>Box select</button>
       <button type="button" disabled={!brush} onClick={() => { onBrush(null); setPreview(null); }} className="rounded border border-slate-300 px-3 py-2 disabled:opacity-40">Clear box selection</button>
-      <a href="#real-results" className="rounded px-2 py-1 text-teal-900 underline underline-offset-4">View matching results ({matchingIds.size.toLocaleString()})</a>
+      <a href="#real-results" onClick={e => { if (onViewResults) { e.preventDefault(); onViewResults(); } }} className="rounded px-2 py-1 text-teal-900 underline underline-offset-4">View matching results ({matchingIds.size.toLocaleString()})</a>
     </div>
     <p className="mt-2 text-xs text-slate-600">{boxSelect ? "Drag a rectangle inside the axes to select proteins. Each drag replaces the previous region; Escape cancels an unfinished drag." : "Select a point to inspect its protein. Use Box select to choose a group for the results table."} Search and table filters also highlight matching points. Selection does not change the statistical results.</p>
     <VolcanoBrushInputs key={JSON.stringify(manualBounds)} bounds={manualBounds} onApply={onBrush} />

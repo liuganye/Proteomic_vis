@@ -4,6 +4,14 @@ A local, read-only demonstration for exploring a fixed proteomics dataset. Searc
 
 [中文说明：数据来源、网页功能与使用边界](./WEB_GUIDE.zh-CN.md)
 
+[教师讨论与项目答疑手册：开场稿、设计依据、演示与常见问题](./MEETING_QA.zh-CN.md)
+
+[下游网格工作区：操作、模块清单与验证记录](./WORKSPACE_DESIGN.zh-CN.md)
+
+The real-data interface has two pages: **QC** and **Downstream workspace**. Drag modules from the left library, move their title bars, and resize their bottom-right corners. Cards snap to a 12-column grid without overlapping. Click **Add** or use each card's **Layout** menu as alternatives. Layouts are saved in this browser; **Undo layout**, **Reset layout**, and **Lock layout** are available. Narrow screens stack cards while preserving desktop positions. Layout saving does not save the analysis session.
+
+Seven modules are available: volcano, results, sample abundance, protein details, STRING network, structure, and GO enrichment. **Real-data GO is currently a movable placeholder with a linked candidate count; annotations and enrichment computation are not connected to this workspace and no real-data GO result is claimed.** Mock/upload results remain separate and retain main's GO enrichment bar chart based on the bundled demo mapping. QC retains session-local custom scatter, bar and histogram plots, and uploads retain group-comparison and annotation-mapping controls.
+
 ## Contents
 
 - Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes real-data QC and RealExplore, plus separate upload/mock QC.
@@ -60,8 +68,6 @@ Open <http://localhost:43147>. Windows was used for the validation described bel
 ## Demo walkthrough
 
 The top **Focused protein** selector opens a searchable dropdown with **Current candidates** and **All proteins** scopes. Candidates follow the results table filters and sort; the full dataset is fetched 20 choices at a time. Each choice shows its gene, protein ID and organism, and the current focus is marked **Selected**. Searching this dropdown does not change the result filters.
-
-QC also supports session-local custom scatter, bar and histogram plots from sample metrics. Shared sample selection applies to the built-in QC charts. Upload/mock Downstream retains its Group A / Group B comparison controls and sample-to-annotation mapping; real-data Downstream uses the imported Human − QC results.
 
 1. QC automatically loads the backend HYE dataset. Select a bar, scatter point, or intensity-summary sample; a correlation cell selects both samples. Open **Real data explore** to see their abundance values or missing status. Selecting an abundance point updates the QC selection too. The initial protein is O00148 / DDX39A; its locally packaged structure is 8IJU.
 2. Use **Box select** to drag a candidate region in the volcano. The real results table shows the intersection of that region, its search, and optional threshold filter. It supports sorting and pagination. For a reproducible single candidate, enter log₂FC bounds −3 to −1 and −log₁₀ adjusted p bounds 7 to 10 under **Set selection bounds with keyboard**: this selects `P32610 / VMA8`. Inspect its table row to update all protein evidence panels. **Inspect points** enables individual point selection.
