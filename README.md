@@ -4,6 +4,14 @@ A local, read-only demonstration for exploring a fixed proteomics dataset. Searc
 
 [中文说明：数据来源、网页功能与使用边界](./WEB_GUIDE.zh-CN.md)
 
+[教师讨论与项目答疑手册：开场稿、设计依据、演示与常见问题](./MEETING_QA.zh-CN.md)
+
+[下游网格工作区：操作、模块清单与验证记录](./WORKSPACE_DESIGN.zh-CN.md)
+
+The real-data interface has two pages: **QC** and **Downstream workspace**. Drag modules from the left library, move their title bars, and resize their bottom-right corners. Cards snap to a 12-column grid without overlapping. Click **Add** or use each card's **Layout** menu as alternatives. Layouts are saved in this browser; **Undo layout**, **Reset layout**, and **Lock layout** are available. Narrow screens stack cards while preserving desktop positions. Layout saving does not save the analysis session.
+
+Seven modules are available: volcano, results, sample abundance, protein details, STRING network, structure, and GO enrichment. **GO is currently a movable placeholder with a linked candidate count; annotations and enrichment computation are not connected and no GO result is claimed.** Mock/upload results remain separate from the real-data workspace.
+
 ## Contents
 
 - Next.js frontend at repo root (`package.json`, `src/`, `public/`); includes real-data QC and RealExplore, plus separate upload/mock QC.

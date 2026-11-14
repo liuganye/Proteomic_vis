@@ -14,6 +14,8 @@ import { medianVsMissingness } from "@/lib/stats";
 import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
 
 const CONDITION_COLORS: Record<string, string> = {
+  "Group A": "#0f766e",
+  "Group B": "#b45309",
   Human: "#0f766e",
   QC: "#b45309",
   Condition_A: "#2563eb",

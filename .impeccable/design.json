@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-12T00:00:00+08:00",
+  "title": "Design System: Proteomics Viz",
+  "extensions": {
+    "shadows": [{ "name": "moving-panel", "value": "0 8px 28px rgb(15 23 42 / 15%)", "purpose": "Active panel movement or resize." }],
+    "breakpoints": [
+      { "name": "compact-shell-max", "value": "1000px" },
+      { "name": "mobile-shell-max", "value": "760px" },
+      { "name": "stacked-grid-container-below", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Continue to workspace",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "QC sidebar action opening the downstream page.",
+      "html": "<button class=\"ds-primary\">Continue to workspace</button>",
+      "css": ".ds-primary{padding:10px 12px;background:#115e59;color:white;border:0;border-radius:6px;font:13px system-ui;cursor:pointer}.ds-primary:focus-visible{outline:2px solid var(--accent,#0f766e);outline-offset:3px}"
+    },
+    {
+      "name": "Layout action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Compact workspace control with selected-tint hover.",
+      "html": "<button class=\"ds-action\">Reset layout</button>",
+      "css": ".ds-action{border:1px solid #cbd5df;border-radius:5px;padding:7px 10px;background:#fff;font:12px system-ui;color:#334155;cursor:pointer}.ds-action:hover:not(:disabled){background:#e5f2ee}.ds-action:disabled{opacity:.45;cursor:not-allowed}.ds-action:focus-visible{outline:2px solid var(--accent,#0f766e);outline-offset:3px}"
+    },
+    {
+      "name": "Analysis page navigation",
+      "kind": "nav",
+      "description": "Two page choices with explicit current-page state.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Analysis pages\"><button>QC</button><button aria-current=\"page\">Downstream workspace</button></nav>",
+      "css": ".ds-nav{display:flex;gap:4px}.ds-nav button{border:0;background:transparent;padding:9px 14px;border-radius:6px;font:14px system-ui;color:#475569;cursor:pointer}.ds-nav button:hover{background:#f1f5f9}.ds-nav button[aria-current=page]{background:#e5f2ee;color:#115e59;font-weight:650}.ds-nav button:focus-visible{outline:2px solid var(--accent,#0f766e);outline-offset:3px}"
+    },
+    {
+      "name": "Module library item",
+      "kind": "card",
+      "refersTo": "module-card",
+      "description": "Addable module with title, purpose and action label.",
+      "html": "<button class=\"ds-module\"><span class=\"ds-module-title\">Protein details <span>Add</span></span><span class=\"ds-module-description\">Identity, annotation and sequence</span></button>",
+      "css": ".ds-module{width:100%;padding:12px 10px;border:1px solid #dbe3e7;border-radius:6px;background:#fff;text-align:left;font-family:system-ui;cursor:grab}.ds-module:hover:not(:disabled){background:#edf6f3;border-color:#77a79c}.ds-module:disabled{background:#f2f5f5;cursor:default}.ds-module-title{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:650}.ds-module-title>span{color:#115e59;font-size:11px;font-weight:500}.ds-module-description{display:block;color:#52616b;font-size:11px;line-height:1.6;margin-top:4px}.ds-module:focus-visible{outline:2px solid var(--accent,#0f766e);outline-offset:3px}"
+    },
+    {
+      "name": "Layout dimension field",
+      "kind": "input",
+      "description": "Width selector from the panel's non-drag layout controls.",
+      "html": "<label class=\"ds-dimension\">Width<select><option>6 / 12 columns</option><option>12 / 12 columns</option></select></label>",
+      "css": ".ds-dimension{display:grid;gap:4px;font:11px system-ui;color:#334155}.ds-dimension select{border:1px solid #cbd5df;padding:5px;border-radius:4px;background:#fff;font:12px system-ui}.ds-dimension select:focus-visible{outline:2px solid var(--accent,#0f766e);outline-offset:3px}"
+    },
+    {
+      "name": "Pending analysis status",
+      "kind": "chip",
+      "refersTo": "pending-status",
+      "description": "Informational GO badge, not an action or completed analysis.",
+      "html": "<span class=\"ds-pending\">Analysis not connected</span>",
+      "css": ".ds-pending{display:inline-block;border:1px solid #d4bb91;color:#854d0e;background:#fffbeb;border-radius:4px;padding:4px 8px;font:11px system-ui}"
+    }
+  ],
+  "narrative": {
+    "overview": "This records the implemented slate and teal application, not a newly approved aesthetic direction. The interface supports operating on data: begin with sample QC, then arrange candidate and protein evidence views around a research question. White surfaces, restrained borders and compact controls keep the analytical content central.",
+    "keyCharacteristics": [
+      "Shared sample selection, candidate filters and focused protein across views.",
+      "Adjustable, non-overlapping analysis panels with visible alternatives to dragging.",
+      "Explicit data identity, unavailable evidence and pending analysis states."
+    ],
+    "rules": [],
+    "dos": [
+      "Do preserve the incumbent slate/teal shell and the analytical meaning of existing plots.",
+      "Do provide Add, keyboard and Layout-menu paths alongside pointer gestures.",
+      "Do keep layout persistence separate from sample selection, candidate filtering and protein focus.",
+      "Do show data source, pending analysis and missing evidence in text."
+    ],
+    "donts": [
+      "Don't present imported statistics as newly recomputed after a filter or layout change.",
+      "Don't present the GO placeholder as completed enrichment or mix synthetic/uploaded evidence into the real snapshot.",
+      "Don't introduce overlapping panels or discard desktop geometry when the narrow layout stacks."
+    ]
+  }
+}

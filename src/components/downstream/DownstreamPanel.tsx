@@ -97,9 +97,9 @@ export function DownstreamPanel({ dataset, module }: Props) {
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Volcano plot</h3>
           <p className="text-sm text-slate-600">
-            Human vs QC when annotation / contrast columns are present. Uses
-            adjusted p-value and log<sub>2</sub> fold change from FragPipe
-            protein output.
+            {dataset.source === "mock"
+              ? "Synthetic Group A vs Group B comparison. Positive log₂FC means higher in Group A; negative means higher in Group B. Values are for demonstration only."
+              : "Uses adjusted p-value and log₂ fold change from the selected contrast in the uploaded protein table."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-sm">

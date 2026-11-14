@@ -8,7 +8,7 @@
     "build": "next build --webpack",
     "start": "next start -p 43147",
     "lint": "next lint",
-    "test": "node --test tests/visualization.test.mjs"
+    "test": "node --test tests/visualization.test.mjs tests/workspace-layout.test.mjs"
   },
   "dependencies": {
     "next": "^16.4.0",
