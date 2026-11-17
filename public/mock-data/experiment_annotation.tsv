@@ -1,8 +1,8 @@
 file	sample	condition	replicate
-Human_1.raw	Human_1	Human	1
-Human_2.raw	Human_2	Human	2
-Human_3.raw	Human_3	Human	3
-Human_4.raw	Human_4	Human	4
-QC_1.raw	QC_1	QC	1
-QC_2.raw	QC_2	QC	2
-QC_3.raw	QC_3	QC	3
+A_1.raw	A_1	Group A	1
+A_2.raw	A_2	Group A	2
+A_3.raw	A_3	Group A	3
+A_4.raw	A_4	Group A	4
+B_1.raw	B_1	Group B	1
+B_2.raw	B_2	Group B	2
+B_3.raw	B_3	Group B	3

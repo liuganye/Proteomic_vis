@@ -22,3 +22,121 @@ body {
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
+
+/* Analysis shell: the existing teal/slate palette, with room for movable views. */
+.proteomics-app { min-height: 100vh; background: #f5f7f8; }
+.proteomics-app :focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
+.proteomics-app ::selection { background: #c8e8e1; color: #123e39; }
+.proteomics-app input { caret-color: #0f766e; }
+.app-topbar { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; padding: 16px 28px; background: #fff; border-bottom: 1px solid #dbe3e7; }
+.app-brand { color: #124f4b; font-size: 20px; font-weight: 700; white-space: nowrap; text-decoration: none; }
+.app-topbar nav { display: flex; gap: 4px; }
+.app-topbar nav button { padding: 9px 14px; border-radius: 6px; font-size: 14px; color: #475569; }
+.app-topbar nav button:hover { background: #f1f5f9; }
+.app-topbar nav button[aria-current=page] { background: #e5f2ee; color: #115e59; font-weight: 650; }
+.app-dataset-status { margin-left: auto; font-size: 12px; color: #334155; text-align: right; }
+.app-dataset-status span { display: block; margin-top: 3px; color: #52616b; font-variant-numeric: tabular-nums; }
+.qc-page-layout { display: grid; grid-template-columns: 224px minmax(0,1fr); max-width: 1800px; margin: 0 auto; }
+.qc-sidebar { padding: 28px 16px; border-right: 1px solid #dbe3e7; }
+.qc-sidebar h2 { font-size: 16px; font-weight: 650; }
+.qc-sidebar > p { margin: 8px 0 24px; color: #52616b; font-size: 13px; line-height: 1.6; }
+.qc-nav-link { width: 100%; padding: 12px 10px; text-align: left; border-radius: 6px; font-size: 14px; }
+.qc-nav-link strong, .qc-nav-link span { display: block; }
+.qc-nav-link span { font-size: 12px; margin-top: 4px; color: #52616b; }
+.qc-nav-link:hover, .qc-nav-link[aria-current=true] { background: #e5f2ee; color: #115e59; }
+.qc-continue { margin-top: 28px; padding: 10px 12px; background: #115e59; color: white; border-radius: 6px; font-size: 13px; width: 100%; }
+.qc-page-main { padding: 28px; min-width: 0; max-width: 1400px; }
+.downstream-page-main { padding: 28px; max-width: 2000px; margin: 0 auto; }
+.workspace-page-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.workspace-page-heading h1 { font-size: 26px; line-height: 1.25; font-weight: 650; letter-spacing: -.02em; color: #172e36; }
+.workspace-page-heading p { margin-top: 8px; color: #52616b; font-size: 14px; line-height: 1.6; max-width: 75ch; }
+.workspace-page-heading > span { font-size: 12px; color: #115e59; white-space: nowrap; }
+.analysis-workspace { display: grid; grid-template-columns: 218px minmax(0,1fr); gap: 24px; align-items: start; }
+.workspace-library { position: sticky; top: 16px; }
+.workspace-library summary { font-size: 16px; font-weight: 650; cursor: pointer; }
+.workspace-library summary > span { font-size: 12px; color: #52616b; padding-left: 8px; }
+.workspace-help, .workspace-library-note { font-size: 12px; color: #52616b; line-height: 1.65; margin-top: 10px; }
+.workspace-library-note { padding-top: 16px; border-top: 1px solid #dbe3e7; margin-top: 24px; }
+.workspace-module-group { margin-top: 24px; }
+.workspace-module-group h3 { font-size: 12px; font-weight: 650; color: #475569; margin-bottom: 8px; }
+.workspace-module { display: block; width: 100%; padding: 12px 10px; border: 1px solid #dbe3e7; border-radius: 6px; background: #fff; text-align: left; margin-top: 6px; }
+.workspace-module[data-draggable=true] { cursor: grab; touch-action: none; user-select: none; }
+.workspace-module:hover:not(:disabled) { background: #edf6f3; border-color: #77a79c; }
+.workspace-module:disabled { background: #f2f5f5; cursor: default; }
+.workspace-module-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 650; }
+.workspace-module-action { color: #115e59; font-size: 11px; font-weight: 500; }
+.workspace-module:disabled .workspace-module-action { color: #52616b; }
+.workspace-module-description { display: block; color: #52616b; font-size: 11px; line-height: 1.6; margin-top: 4px; }
+.workspace-main { min-width: 0; }
+.workspace-main > [aria-label="Shared sample and protein selection"] { border-radius: 12px; background: #fff; border-color: #dbe3e7; }
+.workspace-controls { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; margin: 24px 0 10px; }
+.workspace-controls strong { font-size: 15px; }
+.workspace-controls p { font-size: 12px; line-height: 1.5; color: #52616b; margin-top: 5px; }
+.workspace-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.workspace-actions button, .workspace-panel-controls button, .workspace-empty button { border: 1px solid #cbd5df; border-radius: 5px; padding: 7px 10px; background: #fff; font-size: 12px; color: #334155; }
+.workspace-actions button:hover:not(:disabled), .workspace-panel-controls button:hover { background: #e5f2ee; }
+.workspace-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.workspace-status { display: flex; flex-wrap: wrap; gap: 6px 16px; min-height: 32px; font-size: 11px; color: #52616b; padding-bottom: 10px; }
+.workspace-status [role=status] { color: #115e59; }
+.workspace-grid { position: relative; border-radius: 12px; background-color: #eef2f3; background-image: radial-gradient(#bccaca .7px, transparent .7px); background-size: 16px 16px; }
+.workspace-panel { position: absolute; display: flex; flex-direction: column; min-width: 0; border: 1px solid #cbd5df; border-radius: 12px; background: #fff; }
+.workspace-panel.is-moving { z-index: 5; box-shadow: 0 8px 28px rgb(15 23 42 / 15%); border-color: #0f766e; }
+.workspace-panel-header { display: flex; align-items: center; flex-shrink: 0; gap: 4px; min-height: 43px; padding: 4px 8px; background: #f7faf9; border-radius: 12px 12px 0 0; border-bottom: 1px solid #e2e8f0; }
+.workspace-drag-handle { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; padding: 5px 0; font-size: 13px; font-weight: 650; text-align: left; cursor: grab; touch-action: none; color: #23463f; }
+.workspace-drag-handle:active { cursor: grabbing; }
+.workspace-drag-handle:disabled { cursor: default; color: #334155; }
+.workspace-drag-handle svg { flex-shrink: 0; color: #607d76; }
+.workspace-layout-button { font-size: 11px; padding: 7px; color: #475569; }
+.workspace-layout-button:disabled { opacity: .4; }
+.workspace-remove { padding: 7px; border-radius: 4px; color: #52616b; }
+.workspace-remove:hover:not(:disabled) { color: #9f1239; background: #fff1f2; }
+.workspace-remove:disabled { opacity: .4; }
+.workspace-panel-content { overflow: auto; min-height: 0; flex: 1; border-radius: 0 0 12px 12px; padding-bottom: 12px; scrollbar-width: thin; scrollbar-color: #a8bbb5 #f5f7f8; overscroll-behavior: contain; }
+.workspace-panel-content > section { border: 0; border-radius: 0; padding: 18px; }
+.workspace-panel-content .font-serif { font-family: inherit; }
+.workspace-panel-content h3 { font-size: 16px; }
+.workspace-resize { position: absolute; right: 2px; bottom: 2px; width: 27px; height: 27px; display: grid; place-items: center; background: #f1f6f4; color: #326d61; border-radius: 6px; cursor: nwse-resize; touch-action: none; z-index: 2; }
+.workspace-panel-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 12px; border-bottom: 1px solid #dbe3e7; background: #f1f6f4; flex-shrink: 0; }
+.workspace-panel-controls label { display: grid; gap: 4px; font-size: 11px; color: #334155; }
+.workspace-panel-controls select { border: 1px solid #cbd5df; padding: 5px; border-radius: 4px; background: #fff; font-size: 12px; }
+.workspace-drop-preview { position: absolute; z-index: 8; pointer-events: none; border: 2px dashed #0f766e; background: rgb(221 241 234 / 85%); display: grid; place-items: center; border-radius: 12px; color: #115e59; font-size: 14px; }
+.workspace-empty { padding: 80px 24px; text-align: center; max-width: 520px; margin: auto; }
+.workspace-empty h3 { font-size: 20px; font-weight: 600; }
+.workspace-empty p { font-size: 14px; line-height: 1.7; color: #52616b; margin: 12px 0 20px; }
+.workspace-grid.is-stacked { display: flex; flex-direction: column; gap: 16px; background-image: none; }
+.workspace-grid.is-stacked .workspace-panel { position: relative; width: 100%; height: auto; }
+.workspace-grid.is-stacked .workspace-panel-content { max-height: none; overflow: visible; }
+.go-pending { padding: 24px; }
+.go-status { display: inline-block; border: 1px solid #d4bb91; color: #854d0e; background: #fffbeb; border-radius: 4px; padding: 4px 8px; font-size: 11px; }
+.go-pending h3 { font-weight: 650; margin-top: 20px; }
+.go-pending p { font-size: 13px; line-height: 1.7; color: #52616b; margin-top: 12px; }
+.go-pending dl { margin: 20px 0; font-size: 13px; }
+.go-pending dl div { padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+.go-pending dt { color: #52616b; font-size: 12px; }
+.go-pending dd { margin-top: 4px; font-weight: 600; }
+.go-pending .go-next { color: #854d0e; }
+@media (max-width: 1000px) {
+  .analysis-workspace { grid-template-columns: 180px minmax(0,1fr); gap: 16px; }
+  .downstream-page-main, .qc-page-main { padding: 20px; }
+}
+@media (max-width: 760px) {
+  .app-topbar { gap: 12px; padding: 14px 16px; }
+  .app-topbar nav { order: 3; width: 100%; }
+  .app-topbar nav button { flex: 1; padding: 8px; font-size: 13px; }
+  .app-dataset-status { font-size: 11px; }
+  .app-brand { font-size: 18px; }
+  .qc-page-layout, .analysis-workspace { display: block; }
+  .qc-sidebar { border: 0; padding: 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .qc-sidebar h2, .qc-sidebar > p, .qc-nav-link span { display: none; }
+  .qc-nav-link { width: auto; font-size: 12px; padding: 8px; }
+  .qc-continue { margin-top: 0; width: auto; font-size: 12px; }
+  .workspace-page-heading h1 { font-size: 22px; }
+  .workspace-page-heading > span { display: none; }
+  .downstream-page-main, .qc-page-main { padding: 16px; }
+  .workspace-library { position: static; margin-bottom: 20px; padding: 14px; border: 1px solid #dbe3e7; border-radius: 12px; background: #fff; }
+  .workspace-module-group { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 16px; }
+  .workspace-module-group h3 { grid-column: 1/-1; margin-bottom: 0; }
+  .workspace-module { margin: 0; min-width: 0; }
+  .workspace-library-note { display: none; }
+  .workspace-main > [aria-label="Shared sample and protein selection"] { padding: 12px; }
+}

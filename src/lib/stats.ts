@@ -21,6 +21,8 @@ const CONDITION_PALETTE = [
 ];
 
 const PREFERRED_CONDITION_COLORS: Record<string, string> = {
+  "group a": "#0f766e",
+  "group b": "#b45309",
   human: "#0f766e",
   qc: "#b45309",
 };
