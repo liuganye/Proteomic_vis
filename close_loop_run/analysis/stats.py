@@ -104,6 +104,17 @@ def bh_fdr(p_values: np.ndarray) -> np.ndarray:
     return q
 
 
+def median_center_samples(log2_matrix: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Subtract each sample column's median (finite values) — common LFQ/iBAQ centering."""
+    out = log2_matrix.copy()
+    for col in cols:
+        vals = out[col].to_numpy(dtype=float)
+        med = np.nanmedian(vals)
+        if np.isfinite(med):
+            out[col] = vals - med
+    return out
+
+
 def welch_differential(
     log2_matrix: pd.DataFrame,
     control_cols: list[str],
@@ -113,19 +124,6 @@ def welch_differential(
     alpha: float = 0.05,
 ) -> pd.DataFrame:
     se_df = welch_se_delta(log2_matrix, control_cols, treatment_cols, min_n=min_n)
-    p_vals = []
-    for _, row in se_df.iterrows():
-        if not np.isfinite(row["se_delta"]) or row["se_delta"] == 0:
-            # fall back to scipy if possible
-            pass
-        n_a = int(row["n_control"])
-        n_b = int(row["n_treatment"])
-        if n_a < min_n or n_b < min_n:
-            p_vals.append(np.nan)
-            continue
-        # reconstruct vectors from means/vars is insufficient for t; recompute from matrix
-        p_vals.append(np.nan)
-
     ctrl = log2_matrix[control_cols].to_numpy(dtype=float)
     treat = log2_matrix[treatment_cols].to_numpy(dtype=float)
     p_list = []
@@ -137,7 +135,6 @@ def welch_differential(
         if a.size < min_n or b.size < min_n:
             p_list.append(np.nan)
             continue
-        # scipy welch
         try:
             res = stats.ttest_ind(a, b, equal_var=False, alternative="two-sided")
             p_list.append(float(res.pvalue))
@@ -147,7 +144,160 @@ def welch_differential(
     se_df["p_value"] = p_list
     se_df["adj_p"] = bh_fdr(np.asarray(p_list, dtype=float))
     se_df["significant"] = (se_df["adj_p"] < alpha) & se_df["adj_p"].notna()
+    se_df["test"] = "welch_ttest_two_sided"
     return se_df
+
+
+def limma_like_differential(
+    log2_matrix: pd.DataFrame,
+    control_cols: list[str],
+    treatment_cols: list[str],
+    *,
+    min_n: int = 2,
+    alpha: float = 0.05,
+    df_prior: float | None = None,
+) -> pd.DataFrame:
+    """
+    Empirical-Bayes moderated two-sample t-test (limma-like, equal-variance pool).
+
+    Not a full R limma port, but shrinks residual variances toward a robust prior so
+    small-n proteomics contrasts recover more DAPs than plain Welch — closer to
+    ProStaR/limma behavior used in some papers (e.g. pair-02).
+    """
+    se_df = welch_se_delta(log2_matrix, control_cols, treatment_cols, min_n=min_n)
+    ctrl = log2_matrix[control_cols].to_numpy(dtype=float)
+    treat = log2_matrix[treatment_cols].to_numpy(dtype=float)
+
+    n = len(log2_matrix)
+    mean_a = np.full(n, np.nan)
+    mean_b = np.full(n, np.nan)
+    s2 = np.full(n, np.nan)
+    df = np.full(n, np.nan)
+    n_a_arr = np.zeros(n, dtype=int)
+    n_b_arr = np.zeros(n, dtype=int)
+
+    for i in range(n):
+        a = ctrl[i][np.isfinite(ctrl[i])]
+        b = treat[i][np.isfinite(treat[i])]
+        n_a_arr[i], n_b_arr[i] = a.size, b.size
+        if a.size < min_n or b.size < min_n:
+            continue
+        mean_a[i] = float(np.mean(a))
+        mean_b[i] = float(np.mean(b))
+        # pooled residual variance (equal-variance limma-style for 2 groups)
+        if a.size + b.size > 2:
+            ss = float(np.sum((a - mean_a[i]) ** 2) + np.sum((b - mean_b[i]) ** 2))
+            dfi = a.size + b.size - 2
+            df[i] = dfi
+            s2[i] = ss / dfi if dfi > 0 else np.nan
+
+    valid = np.isfinite(s2) & (s2 > 0) & np.isfinite(df) & (df > 0)
+    if valid.sum() >= 10:
+        # robust prior variance + df (Smyth-inspired moment approx)
+        log_s2 = np.log(s2[valid])
+        s2_prior = float(np.exp(np.median(log_s2)))
+        # df_prior: use configured or a conservative default scaled by n proteins
+        if df_prior is None:
+            # larger squeeze when few proteins have high variance scatter
+            mad = float(np.median(np.abs(log_s2 - np.median(log_s2)))) + 1e-6
+            df_prior = float(np.clip(2.0 / (mad**2), 2.0, 30.0))
+        s2_mod = (df * s2 + df_prior * s2_prior) / (df + df_prior)
+    else:
+        s2_prior = float(np.nanmedian(s2[np.isfinite(s2)])) if np.isfinite(s2).any() else 1.0
+        df_prior = float(df_prior or 4.0)
+        s2_mod = s2.copy()
+
+    p_list = []
+    t_list = []
+    for i in range(n):
+        if not np.isfinite(s2_mod[i]) or n_a_arr[i] < min_n or n_b_arr[i] < min_n:
+            p_list.append(np.nan)
+            t_list.append(np.nan)
+            continue
+        se = float(np.sqrt(s2_mod[i] * (1.0 / n_a_arr[i] + 1.0 / n_b_arr[i])))
+        if se <= 0 or not np.isfinite(se):
+            p_list.append(np.nan)
+            t_list.append(np.nan)
+            continue
+        t_stat = (mean_b[i] - mean_a[i]) / se
+        dfi = float(df[i] + (df_prior or 0.0))
+        p = float(2 * stats.t.sf(abs(t_stat), dfi))
+        p_list.append(p)
+        t_list.append(float(t_stat))
+        # refresh SE/log2FC from moderated path for consistency
+        se_df.loc[i, "se_delta"] = se
+        se_df.loc[i, "log2FC"] = mean_b[i] - mean_a[i]
+        se_df.loc[i, "delta"] = mean_a[i] - mean_b[i]
+        se_df.loc[i, "mean_control"] = mean_a[i]
+        se_df.loc[i, "mean_treatment"] = mean_b[i]
+
+    se_df["t_moderated"] = t_list
+    se_df["p_value"] = p_list
+    se_df["adj_p"] = bh_fdr(np.asarray(p_list, dtype=float))
+    se_df["significant"] = (se_df["adj_p"] < alpha) & se_df["adj_p"].notna()
+    se_df["test"] = "limma_like_moderated_ttest"
+    se_df.attrs["s2_prior"] = s2_prior
+    se_df.attrs["df_prior"] = df_prior
+    return se_df
+
+
+def run_differential(
+    log2_matrix: pd.DataFrame,
+    control_cols: list[str],
+    treatment_cols: list[str],
+    *,
+    test: str = "welch_ttest_two_sided",
+    min_n: int = 2,
+    alpha: float = 0.05,
+    df_prior: float | None = None,
+) -> pd.DataFrame:
+    t = (test or "welch").lower()
+    if t in (
+        "limma_like_moderated_ttest",
+        "limma_like",
+        "limma",
+        "moderated_ttest",
+        "ebayes",
+    ):
+        return limma_like_differential(
+            log2_matrix,
+            control_cols,
+            treatment_cols,
+            min_n=min_n,
+            alpha=alpha,
+            df_prior=df_prior,
+        )
+    return welch_differential(
+        log2_matrix, control_cols, treatment_cols, min_n=min_n, alpha=alpha
+    )
+
+
+def species_ratio_diagnostics(
+    de: pd.DataFrame,
+    *,
+    organism_col: str = "organism_inferred",
+    log2fc_col: str = "log2FC",
+) -> dict:
+    """Median fold ratios stratified by inferred organism (pair-01 style)."""
+    if organism_col not in de.columns:
+        return {"enabled": False, "reason": f"missing {organism_col}"}
+    out: dict = {"enabled": True, "by_organism": {}}
+    for org, sub in de.groupby(organism_col):
+        fc = sub[log2fc_col].astype(float)
+        fc = fc[np.isfinite(fc)]
+        if fc.empty:
+            continue
+        folds = np.power(2.0, fc.to_numpy())
+        out["by_organism"][str(org)] = {
+            "n": int(fc.size),
+            "median_log2FC": float(np.median(fc)),
+            "median_fold_treatment_over_control": float(np.median(folds)),
+            "frac_abs_log2FC_lt_0.5": float(np.mean(np.abs(fc) < 0.5)),
+            "frac_log2FC_within_0.5_of_log2_3": float(
+                np.mean(np.abs(fc - np.log2(3.0)) <= 0.5)
+            ),
+        }
+    return out
 
 
 def se_low_tech_bio(se_df: pd.DataFrame, tertiles: int = 3) -> pd.DataFrame:

@@ -29,60 +29,81 @@ def _detect_protein_col(df: pd.DataFrame, preferred: str | None) -> str:
     raise ValueError(f"No protein ID column found among {list(df.columns)[:30]}...")
 
 
+def _intensity_prefix_candidates(intensity_mode: str | None, intensity_prefix: str | None) -> list[str]:
+    """Ordered prefixes to try when resolving sample intensity columns."""
+    prefixes: list[str] = []
+    if intensity_prefix:
+        prefixes.append(intensity_prefix)
+    mode = (intensity_mode or "lfq").lower()
+    if mode in ("ibaq", "iBAQ".lower()):
+        prefixes.extend(["iBAQ ", "LFQ intensity "])
+    elif mode in ("intensity", "raw_intensity"):
+        prefixes.extend(["Intensity ", "LFQ intensity ", "iBAQ "])
+    else:  # lfq default
+        prefixes.extend(["LFQ intensity ", "iBAQ ", "Intensity "])
+    # FragPipe-style and exact key last
+    prefixes.extend(["", f"__fragpipe__"])
+    # dedupe preserving order
+    seen = set()
+    out = []
+    for p in prefixes:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
 def _detect_intensity_columns(
     df: pd.DataFrame,
     column_groups: dict[str, str],
     intensity_prefix: str | None = None,
+    intensity_mode: str | None = None,
 ) -> dict[str, str]:
     """
     Map logical sample keys in column_groups to actual dataframe columns.
 
     column_groups keys may be:
       - exact column names
-      - MaxQuant sample suffixes matching 'LFQ intensity <suffix>'
+      - MaxQuant sample suffixes matching 'LFQ intensity <suffix>' or 'iBAQ <suffix>'
       - FragPipe sample names matching '<sample> MaxLFQ Intensity'
     """
     cols = list(df.columns)
     resolved: dict[str, str] = {}
-
-    prefixes = []
-    if intensity_prefix:
-        prefixes.append(intensity_prefix)
-    prefixes.extend(
-        [
-            "LFQ intensity ",
-            "MaxLFQ Intensity ",  # unlikely
-            "",  # exact
-        ]
-    )
+    prefixes = _intensity_prefix_candidates(intensity_mode, intensity_prefix)
 
     for key, group in column_groups.items():
         if key in cols:
             resolved[key] = key
             continue
-        # FragPipe: "<sample> MaxLFQ Intensity"
-        frag = f"{key} MaxLFQ Intensity"
-        if frag in cols:
-            resolved[key] = frag
-            continue
-        # MaxQuant: "LFQ intensity <key>"
-        mq = f"LFQ intensity {key}"
-        if mq in cols:
-            resolved[key] = mq
-            continue
-        # Try prefix variants / case-insensitive match on trailing token
         found = None
-        for col in cols:
-            if col.endswith(key) and ("LFQ" in col or "Intensity" in col or "intensity" in col):
-                found = col
-                break
-            if re.fullmatch(rf"(?i)lfq intensity[ _]{re.escape(key)}", col):
-                found = col
+        for prefix in prefixes:
+            if prefix == "__fragpipe__":
+                frag = f"{key} MaxLFQ Intensity"
+                if frag in cols:
+                    found = frag
+                    break
+                continue
+            if prefix == "":
+                continue
+            cand = f"{prefix}{key}"
+            if cand in cols:
+                found = cand
                 break
         if found is None:
+            # trailing-token fallback
+            for col in cols:
+                if col.endswith(key) and any(
+                    tok in col for tok in ("LFQ", "iBAQ", "Intensity", "intensity")
+                ):
+                    found = col
+                    break
+                if re.fullmatch(rf"(?i)(?:lfq intensity|ibaq|intensity)[ _]{re.escape(key)}", col):
+                    found = col
+                    break
+        if found is None:
             raise KeyError(
-                f"Could not resolve intensity column for sample key '{key}'. "
-                f"Looked for exact / 'LFQ intensity {key}' / '{key} MaxLFQ Intensity'."
+                f"Could not resolve intensity column for sample key '{key}' "
+                f"(mode={intensity_mode!r}, prefix={intensity_prefix!r})."
             )
         resolved[key] = found
     return resolved
@@ -122,17 +143,56 @@ def ingest_matrix(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     if not column_groups:
         raise ValueError("samples.column_groups is required")
 
-    resolved = _detect_intensity_columns(df, column_groups, ds.get("intensity_prefix"))
+    intensity_mode = ds.get("intensity_mode") or ds.get("quant") or "lfq"
+    resolved = _detect_intensity_columns(
+        df,
+        column_groups,
+        intensity_prefix=ds.get("intensity_prefix"),
+        intensity_mode=intensity_mode,
+    )
     contam_mode = filters.get("contam_filter", "maxquant_or_fragpipe")
     df = _filter_contaminants(df, protein_col, contam_mode)
 
-    intensity = df[[protein_col] + list(resolved.values())].copy()
-    intensity = intensity.rename(columns={protein_col: "Protein", **{v: k for k, v in resolved.items()}})
-    # collapse duplicate protein rows (rare) by max
-    intensity = intensity.groupby("Protein", as_index=False).max()
+    ann_cfg = cfg.get("annotation", {}) or {}
+    gene_col = ann_cfg.get("gene_column")
+    if gene_col and gene_col not in df.columns:
+        gene_col = None
+    if gene_col is None:
+        for cand in ("Gene names", "Gene", "gene"):
+            if cand in df.columns:
+                gene_col = cand
+                break
+    fasta_col = ann_cfg.get("fasta_header_column")
+    if fasta_col and fasta_col not in df.columns:
+        fasta_col = None
+    if fasta_col is None and "Fasta headers" in df.columns:
+        fasta_col = "Fasta headers"
+
+    keep_cols = [protein_col] + list(resolved.values())
+    if gene_col:
+        keep_cols.append(gene_col)
+    if fasta_col:
+        keep_cols.append(fasta_col)
+    # unique preserve order
+    keep_cols = list(dict.fromkeys(keep_cols))
+    intensity = df[keep_cols].copy()
+    rename_map = {protein_col: "Protein", **{v: k for k, v in resolved.items()}}
+    if gene_col:
+        rename_map[gene_col] = "Gene"
+    if fasta_col:
+        rename_map[fasta_col] = "Fasta headers"
+    intensity = intensity.rename(columns=rename_map)
+
+    # collapse duplicate protein rows (rare) by max on numeric sample cols
+    sample_cols = list(column_groups.keys())
+    agg = {c: "max" for c in sample_cols}
+    if "Gene" in intensity.columns:
+        agg["Gene"] = "first"
+    if "Fasta headers" in intensity.columns:
+        agg["Fasta headers"] = "first"
+    intensity = intensity.groupby("Protein", as_index=False).agg(agg)
 
     zeros_as_nan = bool(filters.get("zeros_as_nan", True))
-    sample_cols = list(column_groups.keys())
     for col in sample_cols:
         intensity[col] = pd.to_numeric(intensity[col], errors="coerce")
         if zeros_as_nan:
@@ -141,7 +201,7 @@ def ingest_matrix(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     analysis_dir = out_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     wide_path = analysis_dir / "abundance_wide.csv"
-    intensity.to_csv(wide_path, index=False)
+    intensity[["Protein", *sample_cols]].to_csv(wide_path, index=False)
 
     # annotation for viz
     ann_rows = []
@@ -153,8 +213,11 @@ def ingest_matrix(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
 
     column_map = {
         "protein_col": protein_col,
+        "intensity_mode": intensity_mode,
         "resolved_columns": resolved,
         "column_groups": column_groups,
+        "gene_column": gene_col,
+        "fasta_header_column": fasta_col,
         "n_proteins": int(len(intensity)),
         "n_samples": len(sample_cols),
         "source_matrix": str(matrix_path),
@@ -183,4 +246,7 @@ def ingest_matrix(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "annotation_path": ann_path,
         "column_map_path": map_path,
         "n_proteins": int(len(intensity)),
+        "intensity_mode": intensity_mode,
+        "gene_column": gene_col,
+        "fasta_header_column": fasta_col,
     }

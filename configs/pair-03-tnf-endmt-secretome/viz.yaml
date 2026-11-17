@@ -16,15 +16,18 @@ contrast:
   id: tnf48h_vs_control48h
   label: TNF-α 48h vs control 48h (HMVEC secretome)
   direction: treatment - control
-  method: welch_ttest_bh
+  method: limma_like_moderated_ttest+lfq
   group_a: control
   group_b: treatment
 
 thresholds:
   p_value_mode: adjusted
   p_cutoff: 0.05
-  abs_log2_fc_cutoff: 0.7
+  # Paper framed ~1.5-fold among shared detections
+  abs_log2_fc_cutoff: 0.585
   significant_only_table: true
+  adaptive:
+    enabled: false
 
 plots:
   qc_missingness: true
@@ -39,6 +42,21 @@ plots:
 go:
   enabled: false
   mode: skip
+
+markers:
+  enabled: true
+  # Explicit EndMT / CAF panel — absent markers are reported, not dropped
+  ids:
+    - PECAM1
+    - CDH5
+    - ACTA2
+    - S100A4
+    - COL1A1
+    - COL1A2
+    - VIM
+    - TNFSF12
+    - TNF
+    - CXCL8
 
 exports:
   formats: [png, csv, json, md]

@@ -7,6 +7,8 @@ meta:
 dataset:
   name: PXD033328-phaeodactylum-nstarvation
   plugin: generic_maxlfq
+  # Paper used iBAQ + limma/ProStaR; prefer iBAQ for this pair
+  intensity_mode: ibaq
   matrix_path: data/smoke/pair-02-phaeodactylum-nstarvation/txt/proteinGroups.txt
   protein_col: Majority protein IDs
   format: tsv
@@ -39,6 +41,10 @@ imputation:
     width: 0.3
   seed: 42
 
+normalization:
+  # Sample-wise median centering on log2 intensities
+  median_center: true
+
 abundance:
   scope: contrast_columns
   log: log10_mean
@@ -51,13 +57,27 @@ se:
   tertiles: 3
 
 differential:
+  # limma-like moderated t (empirical Bayes) — closer to ProStaR/limma than plain Welch
   enabled: true
-  test: welch_ttest_two_sided
+  test: limma_like_moderated_ttest
   fdr: bh
   alpha: 0.05
+  exploratory:
+    alpha: 0.1
+    abs_log2_fc_cutoff: 0.585
+
+annotation:
+  fasta_header_column: Fasta headers
+  # Keyword themes mined from Fasta headers when Gene names are absent
+  theme_keywords:
+    proteasome: ["proteasome", "proteasomal"]
+    ribosome_translation: ["ribosom", "translation", "elongation factor"]
+    amino_acid_metabolism: ["amino.?acid", "glutamine", "glutamate", "urea", "arginase", "deaminase"]
+    nitrogen_scavenging: ["nitrate", "nitrite", "urease", "amidase", "nitrogen"]
+    fatty_acid_desaturase: ["desaturase", "palmitoyl", "acyl.?acp", "fatty acid"]
 
 tech_bio:
-  enabled: true
+  enabled: false
   tech_rule: se_low_fallback
   non_se_proxy: none
 

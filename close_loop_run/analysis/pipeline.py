@@ -8,13 +8,16 @@ from typing import Any
 
 import pandas as pd
 
+from close_loop_run.analysis.annotate import DEFAULT_THEME_KEYWORDS, build_annotation_frame
 from close_loop_run.analysis.impute import impute_methods
 from close_loop_run.analysis.ingest import ingest_matrix
 from close_loop_run.analysis.stats import (
     abundance_means,
+    median_center_samples,
     nan_frequency,
+    run_differential,
     se_low_tech_bio,
-    welch_differential,
+    species_ratio_diagnostics,
 )
 from close_loop_run.config import deep_get
 
@@ -36,6 +39,23 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         raise ValueError(
             f"Need ≥2 samples per arm; got control={control_cols}, treatment={treatment_cols}"
         )
+
+    # Annotation frame (gene / fasta / organism / themes)
+    ann_cfg = cfg.get("annotation", {}) or {}
+    theme_map = ann_cfg.get("theme_keywords") or DEFAULT_THEME_KEYWORDS
+    genes = matrix["Gene"] if "Gene" in matrix.columns else None
+    fasta = matrix["Fasta headers"] if "Fasta headers" in matrix.columns else None
+    annot = build_annotation_frame(
+        matrix["Protein"], genes=genes, fasta=fasta, theme_map=theme_map
+    )
+    # prefer explicit Gene column values when present
+    if genes is not None:
+        annot["Gene"] = [
+            (str(g).split(";")[0] if pd.notna(g) and str(g) not in ("", "nan") else a)
+            for g, a in zip(genes.tolist(), annot["Gene"].tolist())
+        ]
+    annot_path = analysis_dir / "protein_annotation.csv"
+    annot.to_csv(annot_path, index=False)
 
     # Step 1 — NaN-freq on linear (pre-impute) contrast columns
     nan_freq = nan_frequency(matrix, contrast_cols)
@@ -61,7 +81,14 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         else next(iter(imputed))
     )
     log2 = imputed[primary_method]
-    log2_path = analysis_dir / f"abundance_log2_{primary_method}.csv"
+
+    # Optional sample median centering (helps ratio recovery / batch-ish offsets)
+    norm_cfg = cfg.get("normalization", {}) or {}
+    if norm_cfg.get("median_center", False):
+        log2 = median_center_samples(log2, sample_cols)
+        primary_method = f"{primary_method}+median_center"
+
+    log2_path = analysis_dir / "abundance_log2.csv"
     log2.to_csv(log2_path, index=False)
 
     # Step 3 — Abundance
@@ -75,11 +102,21 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
 
     # Steps 4–5 — SE + DE
     min_n = int(deep_get(cfg, "samples", "min_n_per_arm", default=2))
-    alpha = float(deep_get(cfg, "differential", "alpha", default=0.05))
-    de = welch_differential(
-        log2, control_cols, treatment_cols, min_n=min_n, alpha=alpha
+    diff_cfg = cfg.get("differential", {}) or {}
+    alpha = float(diff_cfg.get("alpha", 0.05))
+    test_name = diff_cfg.get("test", "welch_ttest_two_sided")
+    df_prior = diff_cfg.get("df_prior")
+    de = run_differential(
+        log2,
+        control_cols,
+        treatment_cols,
+        test=test_name,
+        min_n=min_n,
+        alpha=alpha,
+        df_prior=float(df_prior) if df_prior is not None else None,
     )
     de = de.merge(abund, on="Protein", how="left")
+    de = de.merge(annot, on="Protein", how="left")
 
     # Step 6 — optional tech/bio
     tech_cfg = cfg.get("tech_bio", {}) or {}
@@ -91,11 +128,21 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     else:
         tech_path = None
 
+    # Species ratio diagnostics (pair-01)
+    diag_cfg = cfg.get("diagnostics", {}) or {}
+    species_diag = None
+    if diag_cfg.get("species_ratios", False):
+        species_diag = species_ratio_diagnostics(de)
+        (analysis_dir / "species_ratio_diagnostics.json").write_text(
+            json.dumps(species_diag, indent=2), encoding="utf-8"
+        )
+
     de_path = analysis_dir / "contrast_welch_bh.csv"
-    # viz-friendly columns
     de_export = de.rename(columns={"Protein": "Protein ID"})
-    de_export["Gene"] = de_export["Protein ID"].astype(str).str.split("|").str[-1]
-    de_export["method"] = "welch_ttest_bh"
+    if "Gene" not in de_export.columns or de_export["Gene"].fillna("").eq("").all():
+        de_export["Gene"] = de_export["Protein ID"].astype(str).str.split("|").str[-1]
+    de_export["method"] = test_name
+    de_export["quant"] = ingested.get("intensity_mode", "lfq")
     de_export.to_csv(de_path, index=False)
 
     sig = de_export[de_export["significant"] == True].copy()  # noqa: E712
@@ -103,25 +150,61 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     sig_path = analysis_dir / "significant_proteins.csv"
     sig.to_csv(sig_path, index=False)
 
+    # Exploratory cut for sparse matrices (pair-02 style)
+    explor = diff_cfg.get("exploratory") or {}
+    explor_alpha = float(explor.get("alpha", 0.1))
+    explor_fc = float(explor.get("abs_log2_fc_cutoff", 0.5))
+    explor_mask = (
+        de_export["adj_p"].notna()
+        & (de_export["adj_p"] < explor_alpha)
+        & (de_export["log2FC"].abs() > explor_fc)
+    )
+    explor_df = de_export.loc[explor_mask].sort_values("adj_p")
+    explor_path = analysis_dir / "significant_exploratory.csv"
+    explor_df.to_csv(explor_path, index=False)
+
+    # Theme enrichment among significant (keyword hits)
+    theme_summary = {}
+    if "theme_keywords" in sig.columns and len(sig):
+        for themes in sig["theme_keywords"].fillna(""):
+            for t in str(themes).split(";"):
+                if t:
+                    theme_summary[t] = theme_summary.get(t, 0) + 1
+
     n_tested = int(de_export["p_value"].notna().sum())
     n_sig = int(sig.shape[0])
+    n_up = int(((sig["log2FC"] > 0).sum()) if n_sig else 0)
+    n_down = int(((sig["log2FC"] < 0).sum()) if n_sig else 0)
     metrics = {
         "run_id": deep_get(cfg, "meta", "run_id"),
         "dataset": deep_get(cfg, "dataset", "name"),
         "n_proteins": ingested["n_proteins"],
         "n_tested": n_tested,
         "n_significant_q_lt_alpha": n_sig,
+        "n_significant_up": n_up,
+        "n_significant_down": n_down,
+        "n_significant_exploratory": int(len(explor_df)),
         "alpha": alpha,
+        "exploratory_alpha": explor_alpha,
+        "exploratory_abs_log2_fc_cutoff": explor_fc,
         "imputation": primary_method,
+        "test": test_name,
+        "quant": ingested.get("intensity_mode", "lfq"),
+        "median_center": bool(norm_cfg.get("median_center", False)),
         "control_cols": control_cols,
         "treatment_cols": treatment_cols,
         "control_label": ingested["control_label"],
         "treatment_label": ingested["treatment_label"],
         "mean_nan_freq": float(nan_freq.mean()),
         "median_abs_log2FC_sig": float(sig["log2FC"].abs().median()) if n_sig else None,
+        "theme_keyword_counts_among_sig": theme_summary,
+        "species_ratio_diagnostics": species_diag,
         "top_significant": [
             {
                 "protein": str(r["Protein ID"]),
+                "gene": str(r.get("Gene", "")),
+                "organism": str(r.get("organism_inferred", "")),
+                "themes": str(r.get("theme_keywords", "")),
                 "log2FC": float(r["log2FC"]),
                 "adj_p": float(r["adj_p"]),
             }
@@ -135,24 +218,45 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         f"# Analysis summary — {metrics.get('dataset') or metrics.get('run_id')}",
         "",
         f"- Proteins after contaminant filter: **{metrics['n_proteins']}**",
-        f"- Tested (Welch, ≥{min_n}/arm): **{n_tested}**",
-        f"- Significant (BH q < {alpha}): **{n_sig}**",
-        f"- Imputation: `{primary_method}`",
+        f"- Quant columns: `{metrics['quant']}`",
+        f"- Test: `{test_name}` (≥{min_n}/arm)",
+        f"- Tested: **{n_tested}**",
+        f"- Significant (BH q < {alpha}): **{n_sig}** ({n_up} up / {n_down} down)",
+        f"- Exploratory (q < {explor_alpha}, |log2FC| > {explor_fc}): **{len(explor_df)}**",
+        f"- Imputation/normalization: `{primary_method}`",
         f"- Contrast: `{ingested['treatment_label']}` − `{ingested['control_label']}` "
         f"(log2FC = treatment − control)",
         f"- Mean NaN-freq (contrast cols): {metrics['mean_nan_freq']:.3f}",
         "",
-        "## Top significant proteins",
-        "",
     ]
+    if species_diag and species_diag.get("enabled"):
+        summary_lines.append("## Species-stratified median ratios")
+        summary_lines.append("")
+        summary_lines.append("| Organism | n | median log2FC | median fold (treat/ctrl) |")
+        summary_lines.append("| --- | ---: | ---: | ---: |")
+        for org, st in species_diag.get("by_organism", {}).items():
+            summary_lines.append(
+                f"| {org} | {st['n']} | {st['median_log2FC']:.3f} | "
+                f"{st['median_fold_treatment_over_control']:.3f} |"
+            )
+        summary_lines.append("")
+    if theme_summary:
+        summary_lines.append("## Theme keywords among significant")
+        summary_lines.append("")
+        for k, v in sorted(theme_summary.items(), key=lambda kv: -kv[1]):
+            summary_lines.append(f"- `{k}`: {v}")
+        summary_lines.append("")
+    summary_lines.append("## Top significant proteins")
+    summary_lines.append("")
     if n_sig == 0:
         summary_lines.append("_None at current thresholds._")
     else:
-        summary_lines.append("| Protein | log2FC | adj_p |")
-        summary_lines.append("| --- | ---: | ---: |")
+        summary_lines.append("| Protein | Gene | log2FC | adj_p | themes |")
+        summary_lines.append("| --- | --- | ---: | ---: | --- |")
         for item in metrics["top_significant"][:15]:
             summary_lines.append(
-                f"| `{item['protein']}` | {item['log2FC']:.3f} | {item['adj_p']:.2e} |"
+                f"| `{item['protein']}` | {item['gene']} | {item['log2FC']:.3f} | "
+                f"{item['adj_p']:.2e} | {item['themes']} |"
             )
     summary_path = analysis_dir / "summary.md"
     summary_path.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
@@ -164,6 +268,8 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "annotation": ingested["annotation_path"],
         "contrast_table": de_path,
         "significant_table": sig_path,
+        "exploratory_table": explor_path,
+        "protein_annotation": annot_path,
         "metrics": metrics,
         "metrics_path": metrics_path,
         "summary_path": summary_path,

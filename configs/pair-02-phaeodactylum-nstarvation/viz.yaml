@@ -16,15 +16,21 @@ contrast:
   id: minusN_vs_plusN
   label: Nitrogen starvation (−N) vs replete (+N)
   direction: treatment - control
-  method: welch_ttest_bh
+  method: limma_like_moderated_ttest+ibaq
   group_a: control
   group_b: treatment
 
 thresholds:
   p_value_mode: adjusted
   p_cutoff: 0.05
-  abs_log2_fc_cutoff: 0.7
+  abs_log2_fc_cutoff: 0.585   # ~1.5-fold (paper-like)
   significant_only_table: true
+  adaptive:
+    enabled: true
+    min_hits: 50
+    p_cutoff: 0.1
+    abs_log2_fc_cutoff: 0.585
+    promote_to_volcano: true
 
 plots:
   qc_missingness: true
@@ -39,6 +45,16 @@ plots:
 go:
   enabled: false
   mode: skip
+
+markers:
+  enabled: true
+  # Fasta/keyword proxies for paper themes (IDs may be Phatr accessions)
+  ids:
+    - desaturase
+    - proteasome
+    - glutamine
+    - glutamate
+    - ribosom
 
 exports:
   formats: [png, csv, json, md]

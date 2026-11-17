@@ -74,6 +74,12 @@ def _mirror_artifacts(run_dir: Path, dest: Path, analysis_res: dict[str, Any], v
     _copy_file(arts.get("report.index"), text / "report_index.md")
     _copy_file(arts.get("de.contrast_summary"), text / "contrast_summary.json")
     _copy_file(arts.get("qc.summary"), text / "qc_summary.json")
+    _copy_file(arts.get("de.markers"), text / "markers.json")
+    analysis_dir = Path(analysis_res.get("analysis_dir") or (run_dir / "analysis"))
+    _copy_file(analysis_dir / "species_ratio_diagnostics.json", text / "species_ratio_diagnostics.json")
+    _copy_file(analysis_res.get("exploratory_table"), tables / "significant_exploratory.csv")
+    _copy_file(analysis_res.get("protein_annotation"), tables / "protein_annotation.csv")
+    _copy_file(arts.get("de.sig_table_adaptive"), tables / "significant_adaptive.tsv")
     _copy_file(run_dir / "run_result.json", dest / "run_result.json")
 
 
@@ -105,11 +111,14 @@ def main(argv: list[str] | None = None) -> int:
                 viz_cfg["inputs"][key] = str(val)
         viz_cfg.setdefault("contrast", {})
         c = viz_cfg["contrast"]
-        c.setdefault("method", "welch_ttest_bh")
+        method = analysis_res["metrics"].get("test") or "welch_ttest_bh"
+        quant = analysis_res["metrics"].get("quant")
+        c["method"] = f"{method}" + (f"+{quant}" if quant else "")
         c.setdefault("group_a", analysis_res["metrics"].get("control_label", "control"))
         c.setdefault("group_b", analysis_res["metrics"].get("treatment_label", "treatment"))
         if not c.get("direction"):
             c["direction"] = f"{c['group_b']} - {c['group_a']}"
+
 
 
     viz_out = out_dir / "viz"

@@ -2,7 +2,6 @@ run_id: pair-01-maxlfq-hela-ecoli
 output_dir: runs/pair-01-maxlfq-hela-ecoli/viz
 
 inputs:
-  # filled by runner from analysis outputs when omitted; kept as schema docs
   abundance_wide: null
   abundance_long: null
   annotation: null
@@ -17,7 +16,7 @@ contrast:
   id: high_vs_low_ecoli
   label: High E. coli vs low E. coli (HeLa background)
   direction: treatment - control
-  method: welch_ttest_bh
+  method: limma_like_moderated_ttest+lfq
   group_a: control
   group_b: treatment
 
@@ -26,6 +25,8 @@ thresholds:
   p_cutoff: 0.05
   abs_log2_fc_cutoff: 0.7
   significant_only_table: true
+  adaptive:
+    enabled: false
 
 plots:
   qc_missingness: true
@@ -40,6 +41,9 @@ plots:
 go:
   enabled: false
   mode: skip
+
+markers:
+  enabled: false
 
 exports:
   formats: [png, csv, json, md]

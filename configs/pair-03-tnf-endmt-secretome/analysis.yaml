@@ -7,6 +7,7 @@ meta:
 dataset:
   name: PXD014488-tnf-endmt-secretome
   plugin: generic_maxlfq
+  intensity_mode: lfq
   matrix_path: data/smoke/pair-03-tnf-endmt-secretome/txt/proteinGroups.txt
   protein_col: Majority protein IDs
   format: tsv
@@ -39,6 +40,9 @@ imputation:
     width: 0.3
   seed: 42
 
+normalization:
+  median_center: true
+
 abundance:
   scope: contrast_columns
   log: log10_mean
@@ -52,14 +56,19 @@ se:
 
 differential:
   enabled: true
-  test: welch_ttest_two_sided
+  test: limma_like_moderated_ttest
   fdr: bh
   alpha: 0.05
+  exploratory:
+    alpha: 0.1
+    abs_log2_fc_cutoff: 0.585
+
+annotation:
+  gene_column: Gene names
+  fasta_header_column: Fasta headers
 
 tech_bio:
-  enabled: true
-  tech_rule: se_low_fallback
-  non_se_proxy: none
+  enabled: false
 
 mistaken_id:
   enabled: false
