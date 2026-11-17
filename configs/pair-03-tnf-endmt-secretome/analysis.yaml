@@ -1,0 +1,69 @@
+meta:
+  run_id: pair-03-tnf-endmt-secretome
+  project: close-loop AI for proteomic data analysis
+  out_dir: runs/pair-03-tnf-endmt-secretome
+  graceful_skip_missing: true
+
+dataset:
+  name: PXD014488-tnf-endmt-secretome
+  plugin: generic_maxlfq
+  matrix_path: data/smoke/pair-03-tnf-endmt-secretome/txt/proteinGroups.txt
+  protein_col: Majority protein IDs
+  format: tsv
+
+samples:
+  # Smoke focus: 48 h control vs TNF-α
+  column_groups:
+    C48_a: control
+    C48_b: control
+    C48_c: control
+    tnf48h_a: treatment
+    tnf48h_b: treatment
+    tnf48h_c: treatment
+  control_label: control
+  treatment_label: treatment
+  min_n_per_arm: 2
+
+filters:
+  contam_filter: maxquant_or_fragpipe
+  zeros_as_nan: true
+
+missingness:
+  nan_freq_scope: contrast_columns
+  allow_partial: true
+
+imputation:
+  methods: [perseus_left_censored]
+  perseus:
+    shift: 1.8
+    width: 0.3
+  seed: 42
+
+abundance:
+  scope: contrast_columns
+  log: log10_mean
+
+se:
+  enabled: true
+  formula: welch_se_delta
+  contrast: control_minus_treatment
+  qc_arm: omit
+  tertiles: 3
+
+differential:
+  enabled: true
+  test: welch_ttest_two_sided
+  fdr: bh
+  alpha: 0.05
+
+tech_bio:
+  enabled: true
+  tech_rule: se_low_fallback
+  non_se_proxy: none
+
+mistaken_id:
+  enabled: false
+
+logging:
+  format: jsonl
+  dir: runs/pair-03-tnf-endmt-secretome/logs

@@ -1,0 +1,54 @@
+run_id: pair-02-phaeodactylum-nstarvation
+output_dir: runs/pair-02-phaeodactylum-nstarvation/viz
+
+inputs:
+  abundance_wide: null
+  abundance_long: null
+  annotation: null
+  contrast_table: null
+  protein_id_column: Protein ID
+  gene_column: Gene
+  log2fc_column: log2FC
+  p_value_column: p_value
+  adj_p_column: adj_p
+
+contrast:
+  id: minusN_vs_plusN
+  label: Nitrogen starvation (−N) vs replete (+N)
+  direction: treatment - control
+  method: welch_ttest_bh
+  group_a: control
+  group_b: treatment
+
+thresholds:
+  p_value_mode: adjusted
+  p_cutoff: 0.05
+  abs_log2_fc_cutoff: 0.7
+  significant_only_table: true
+
+plots:
+  qc_missingness: true
+  qc_intensity_hist: true
+  qc_intensity_box: true
+  qc_correlation: false
+  qc_median_vs_missing: false
+  volcano_adj_p: true
+  volcano_raw_p: false
+  go_enrichment: false
+
+go:
+  enabled: false
+  mode: skip
+
+exports:
+  formats: [png, csv, json, md]
+  dpi: 150
+  write_qc_conclusions: true
+  write_significant_table: true
+  write_report_index: true
+
+style:
+  missing_as_zero: true
+  log_intensity_base: 10
+
+forbid_approximate_de: true
