@@ -94,9 +94,15 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     annot = build_annotation_frame(
         matrix["Protein"], genes=genes, fasta=fasta, theme_map=theme_map
     )
-    # prefer explicit Gene column values when present
+    # Prefer explicit Gene column values when present.
+    # Keep the full semicolon-joined MaxQuant "Gene names" string so marker
+    # panels can match secondary symbols (e.g. ACTA2 in ACTB;…;ACTA2 groups).
     if genes is not None:
         annot["Gene"] = [
+            (str(g) if pd.notna(g) and str(g) not in ("", "nan") else a)
+            for g, a in zip(genes.tolist(), annot["Gene"].tolist())
+        ]
+        annot["Gene_primary"] = [
             (str(g).split(";")[0] if pd.notna(g) and str(g) not in ("", "nan") else a)
             for g, a in zip(genes.tolist(), annot["Gene"].tolist())
         ]

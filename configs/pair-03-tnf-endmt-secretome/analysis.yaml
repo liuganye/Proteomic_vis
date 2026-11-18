@@ -71,6 +71,10 @@ diagnostics:
   # Paper reports ~3× secreted protein load at 48 h by iBAQ; keep DE on LFQ
   group_load: true
   group_load_intensity_mode: ibaq
+  # Iter3 Agent5: explicit fraction-changed at 1.5-fold (paper 'most differ' claim)
+  fraction_changed: true
+  fraction_changed_fold_cutoff: 1.5
+  fraction_changed_alpha: 0.05
 
 tech_bio:
   enabled: false

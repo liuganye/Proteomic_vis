@@ -57,6 +57,12 @@ markers:
     - TNFSF12
     - TNF
     - CXCL8
+  aliases:
+    PECAM1: ["CD31", "PECAM-1"]
+    CDH5: ["VE-cadherin", "CD144"]
+    ACTA2: ["alpha-SMA", "α-SMA", "ACTSA"]
+    S100A4: ["FSP1", "MTS1"]
+    TNFSF12: ["TWEAK", "APO3L"]
 
 exports:
   formats: [png, csv, json, md]
