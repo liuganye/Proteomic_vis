@@ -121,3 +121,12 @@ test("all-missing protein displays an explicit empty state and keeps sample deta
   assert.match(html, /aria-pressed="true"/);
   assert.doesNotMatch(html, /<svg\b/);
 });
+
+test("displayed intensities are rounded to two decimals without moving points", () => {
+  const html = renderAbundance([
+    { sample_id: "S_1", display_group: "A", log2_intensity: 25.411853617233 },
+    { sample_id: "S_2", display_group: "A", log2_intensity: 24.1 },
+  ], ["S_1"]);
+  assert.match(html, /25\.41/);
+  assert.doesNotMatch(html, /25\.4118/, "no unrounded value in text, tooltip, aria-label or table");
+});

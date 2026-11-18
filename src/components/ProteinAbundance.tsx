@@ -11,6 +11,11 @@ function isObserved(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
 }
 
+/** Display precision only; underlying values and positions stay unrounded. */
+function formatIntensity(value: number) {
+  return value.toFixed(2);
+}
+
 function tickLabel(value: number, step: number) {
   const digits = Math.max(0, Math.min(15, Math.ceil(-Math.log10(step)) + 1));
   return value.toFixed(digits);
@@ -42,7 +47,7 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
       <strong>QC selected samples:</strong> {!selectedSamples.length && "None"}
       {selectedSamples.map(id => {
         const point = abundance.points.find(p => p.sample_id === id);
-        const status = !point ? "not in this abundance response" : isObserved(point.log2_intensity) ? `log₂ intensity ${point.log2_intensity}` : "missing";
+        const status = !point ? "not in this abundance response" : isObserved(point.log2_intensity) ? `log₂ intensity ${formatIntensity(point.log2_intensity)}` : "missing";
         return <p key={id}>{id} · {status}</p>;
       })}
     </div>
@@ -68,8 +73,8 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
               if (!isObserved(point.log2_intensity)) return null;
               const selected = selectedSamples.includes(point.sample_id);
               return <circle key={point.sample_id} data-sample={point.sample_id} cx={group.left + point.x} cy={y(point.log2_intensity)} r={selected ? 6 : 4} fill={selected ? "#c2410c" : "#0f766e"} opacity="0.9" stroke={selected ? "#0f172a" : "none"} strokeWidth="2"
-                role="button" tabIndex={0} aria-label={`Select sample ${point.sample_id}, ${group.name}, log₂ intensity ${point.log2_intensity}`} aria-pressed={selected} onClick={() => onSelectSamples([point.sample_id])} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSamples([point.sample_id]); } }} className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900">
-                <title>{`${point.sample_id}: ${point.log2_intensity}`}</title>
+                role="button" tabIndex={0} aria-label={`Select sample ${point.sample_id}, ${group.name}, log₂ intensity ${formatIntensity(point.log2_intensity)}`} aria-pressed={selected} onClick={() => onSelectSamples([point.sample_id])} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSamples([point.sample_id]); } }} className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900">
+                <title>{`${point.sample_id}: ${formatIntensity(point.log2_intensity)}`}</title>
               </circle>;
             })}
           </g>;})}
@@ -87,7 +92,7 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
             const selected = selectedSamples.includes(point.sample_id);
             return <tr key={point.sample_id} className={`border-b border-slate-100 ${selected ? "bg-orange-50" : ""}`}>
               <td className="px-2 py-2"><button type="button" aria-pressed={selected} onClick={() => onSelectSamples([point.sample_id])} className="rounded border border-slate-300 px-2 py-1 text-left text-teal-900 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700">{point.sample_id}</button></td>
-              <td className="px-2 py-2">{point.display_group}</td><td className="px-2 py-2">{observed ? point.log2_intensity : "—"}</td><td className="px-2 py-2">{observed ? "Observed" : "Missing"}</td>
+              <td className="px-2 py-2">{point.display_group}</td><td className="px-2 py-2">{observed ? formatIntensity(point.log2_intensity) : "—"}</td><td className="px-2 py-2">{observed ? "Observed" : "Missing"}</td>
             </tr>;
           })}</tbody>
         </table>
