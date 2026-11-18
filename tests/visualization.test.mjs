@@ -14,6 +14,7 @@ async function loadTs(path) {
 }
 const stats = await loadTs("../src/lib/stats.ts");
 const vis = await loadTs("../src/lib/visualization.ts");
+const qcPlot = await loadTs("../src/lib/qc-plot.ts");
 const dataset = values => ({ samples: ["sample"], annotation: [], proteins: values.map(v => ({ maxlfq: { sample: v } })) });
 
 test("histogram counts all observations, excludes unusable values and includes the upper endpoint", () => {
@@ -31,6 +32,80 @@ test("empty and constant intensity data have finite, explicit bins", () => {
   assert.equal(result.bins[0].count, 3);
   assert.ok(result.bins[0].lower < 2 && result.bins[0].upper > 2);
   assert.throws(() => stats.intensityHistogram(dataset([1]), 0));
+});
+
+test("group histograms share bin boundaries and sum to the full histogram", () => {
+  const full = stats.intensityHistogram(dataset([1, 10, 100, 1000, 10000]), 4);
+  const domain = [full.bins[0].lower, full.bins.at(-1).upper];
+  const a = stats.intensityHistogram(dataset([1, 100, 10000]), 4, domain);
+  const b = stats.intensityHistogram(dataset([10, 1000]), 4, domain);
+  assert.deepEqual(a.bins.map(bin => [bin.lower, bin.upper]), full.bins.map(bin => [bin.lower, bin.upper]));
+  assert.deepEqual(a.bins.map((bin, i) => bin.count + b.bins[i].count), full.bins.map(bin => bin.count));
+  assert.equal(stats.intensityHistogram(dataset([100, 100]), 4, domain).bins.length, 4);
+  assert.throws(() => stats.intensityHistogram(dataset([1, 100]), 4, [1, 2]), /contain/);
+  assert.throws(() => stats.intensityHistogram(dataset([1]), 4, [2, 2]), /increasing/);
+});
+
+test("empty and constant sample correlations are undefined, including the diagonal", () => {
+  const data = { samples: ["empty", "one", "constant", "variable"], annotation: [], proteins: [
+    { maxlfq: { empty: 0, one: 10, constant: 100, variable: 10 } },
+    { maxlfq: { empty: 0, one: 0, constant: 100, variable: 100 } },
+    { maxlfq: { empty: 0, one: 0, constant: 100, variable: 1000 } },
+  ] };
+  const result = stats.sampleCorrelationMatrix(data);
+  for (const sample of ["empty", "one", "constant"]) {
+    const i = result.samples.indexOf(sample);
+    assert.ok(Number.isNaN(result.matrix[i][i]), sample);
+  }
+  const i = result.samples.indexOf("variable");
+  assert.equal(result.matrix[i][i], 1);
+});
+
+test("constant log intensities stay undefined despite floating-point rounding", () => {
+  for (const count of [3, 45, 9369]) {
+    const data = { samples: ["constant", "variable"], annotation: [], proteins:
+      Array.from({ length: count }, (_, i) => ({ maxlfq: {
+        constant: 1234567,
+        variable: 10 ** (1 + i % 7),
+      } })),
+    };
+    const result = stats.sampleCorrelationMatrix(data);
+    const c = result.samples.indexOf("constant");
+    const v = result.samples.indexOf("variable");
+    assert.ok(Number.isNaN(result.matrix[c][c]), `constant diagonal, n=${count}`);
+    assert.ok(Number.isNaN(result.matrix[c][v]), `constant vs variable, n=${count}`);
+    assert.ok(Number.isNaN(result.matrix[v][c]), `variable vs constant, n=${count}`);
+    assert.equal(result.matrix[v][v], 1);
+  }
+});
+
+test("Pearson preserves known correlations using only paired finite values", () => {
+  const a = [1e9 + 1, NaN, 1e9 + 2, Infinity, 1e9 + 3, 1e9 + 4];
+  const b = [2, 999, 4, 999, 6, 8];
+  assert.ok(Math.abs(stats.pearson(a, b) - 1) < 1e-12);
+  assert.ok(Math.abs(stats.pearson(b, a) - 1) < 1e-12);
+  assert.ok(Math.abs(stats.pearson(a, b.map(value => -value)) + 1) < 1e-12);
+  assert.ok(Math.abs(stats.pearson([1, 2, 3], [2, 0, 2])) < 1e-12);
+});
+
+test("pair inspector counts only proteins observed in both samples", () => {
+  const data = { proteins: [
+    { maxlfq: { a: 10, b: 100 } }, { maxlfq: { a: 0, b: 10 } },
+    { maxlfq: { a: Infinity, b: 10 } }, { maxlfq: { a: 10, b: -1 } },
+    { maxlfq: { a: 100, b: 1000 } }, { maxlfq: { a: NaN } },
+  ] };
+  assert.equal(qcPlot.sharedProteinCount(data, "a", "b"), 2);
+  assert.equal(qcPlot.sharedProteinCount(data, "b", "a"), 2);
+  assert.equal(qcPlot.sharedProteinCount(data, "a", "a"), 3);
+  assert.equal(qcPlot.sharedProteinCount(data, "a", "unknown"), 0);
+});
+
+test("Q2 intensity summary axes contain every finite value, including constant and empty data", () => {
+  for (const values of [[], [7.2], [7.2, 7.2], [6.1, 7.9, NaN, Infinity]]) {
+    const [min, max] = qcPlot.paddedDomain(values);
+    assert.ok(Number.isFinite(min) && Number.isFinite(max) && min < max);
+    for (const value of values.filter(Number.isFinite)) assert.ok(value > min && value < max);
+  }
 });
 
 test("real HYE histogram accounts for every observed value without the old 20k cap", async () => {

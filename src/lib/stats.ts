@@ -189,8 +189,9 @@ export function intensityLong(
 }
 
 /** Count every positive finite observation; only the aggregated bins are plotted. */
-export function intensityHistogram(dataset: FragPipeDataset, binCount = 30) {
+export function intensityHistogram(dataset: FragPipeDataset, binCount = 30, domain?: [number, number]) {
   if (!Number.isInteger(binCount) || binCount < 1) throw new Error("binCount must be a positive integer");
+  if (domain && (!domain.every(Number.isFinite) || domain[0] >= domain[1])) throw new Error("Histogram domain must be finite and increasing");
   let min = Infinity;
   let max = -Infinity;
   let total = 0;
@@ -205,10 +206,11 @@ export function intensityHistogram(dataset: FragPipeDataset, binCount = 30) {
     }
   }
   if (!total) return { bins: [], total: 0 };
+  if (domain && (domain[0] > min || domain[1] < max)) throw new Error("Histogram domain must contain all observations");
   // Constant data occupies one explicitly bounded bin.
-  const count = min === max ? 1 : binCount;
-  const start = min === max ? min - 0.5 : min;
-  const end = min === max ? max + 0.5 : max;
+  const count = min === max && !domain ? 1 : binCount;
+  const start = domain?.[0] ?? (min === max ? min - 0.5 : min);
+  const end = domain?.[1] ?? (min === max ? max + 0.5 : max);
   const width = (end - start) / count;
   const bins = Array.from({ length: count }, (_, i) => ({
     lower: start + i * width,
@@ -283,30 +285,30 @@ function quartiles(sorted: number[]) {
 export function pearson(a: number[], b: number[]): number {
   const n = Math.min(a.length, b.length);
   if (n < 2) return NaN;
-  let sumA = 0,
-    sumB = 0,
-    sumAB = 0,
-    sumA2 = 0,
-    sumB2 = 0;
+  let meanA = 0,
+    meanB = 0,
+    covariance = 0,
+    varianceA = 0,
+    varianceB = 0;
   let used = 0;
+  // Update centered moments directly: subtracting large raw sums can give
+  // constant samples a nonzero variance through floating-point cancellation.
   for (let i = 0; i < n; i++) {
     const x = a[i];
     const y = b[i];
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     used += 1;
-    sumA += x;
-    sumB += y;
-    sumAB += x * y;
-    sumA2 += x * x;
-    sumB2 += y * y;
+    const deltaA = x - meanA;
+    const deltaB = y - meanB;
+    meanA += deltaA / used;
+    meanB += deltaB / used;
+    covariance += deltaA * (y - meanB);
+    varianceA += deltaA * (x - meanA);
+    varianceB += deltaB * (y - meanB);
   }
-  if (used < 2) return NaN;
-  const num = used * sumAB - sumA * sumB;
-  const den = Math.sqrt(
-    (used * sumA2 - sumA * sumA) * (used * sumB2 - sumB * sumB),
-  );
-  if (den === 0) return NaN;
-  return num / den;
+  if (used < 2 || varianceA <= 0 || varianceB <= 0) return NaN;
+  const r = covariance / Math.sqrt(varianceA * varianceB);
+  return Number.isFinite(r) ? Math.max(-1, Math.min(1, r)) : NaN;
 }
 
 /** Pairwise Pearson on log10 MaxLFQ (zeros treated as missing / skipped). */
@@ -327,7 +329,8 @@ export function sampleCorrelationMatrix(dataset: FragPipeDataset): {
   );
   const matrix = samples.map((_, i) =>
     samples.map((_, j) => {
-      if (i === j) return 1;
+      // An empty, singleton or constant sample has undefined correlation, even with itself.
+      if (i === j) return Number.isFinite(pearson(vectors[i], vectors[i])) ? 1 : NaN;
       // pairwise complete
       const a: number[] = [];
       const b: number[] = [];
