@@ -188,12 +188,25 @@ def run_viz(
             hit_idx = None
             for tok in tokens:
                 tok_up = tok.upper()
-                cand = de.index[
-                    de_genes.str.contains(rf"(?:^|;){re.escape(tok_up)}(?:;|$)", na=False)
-                    | de_ids_up.str.contains(re.escape(tok_up), na=False)
-                    | fasta_s.str.contains(re.escape(tok_up), na=False)
-                    | theme_s.str.contains(re.escape(tok_up), na=False)
-                ]
+                # Gene / theme: token-boundary (avoid MTS1⊂ADAMTS1). IDs/Fasta: substring OK for accessions.
+                gene_hit = de_genes.str.contains(
+                    rf"(?:^|;){re.escape(tok_up)}(?:;|$)", na=False
+                )
+                theme_hit = theme_s.str.contains(
+                    rf"(?:^|;|,|\s){re.escape(tok_up)}(?:;|,|\s|$)", na=False
+                )
+                # Short aliases (<5 chars) must not substring-match arbitrary IDs/Fasta
+                if len(tok_up) < 5:
+                    id_hit = de_ids_up.str.contains(
+                        rf"(?:^|;|,){re.escape(tok_up)}(?:;|,|$)", na=False
+                    )
+                    fasta_hit = fasta_s.str.contains(
+                        rf"(?:^|\W){re.escape(tok_up)}(?:\W|$)", na=False
+                    )
+                else:
+                    id_hit = de_ids_up.str.contains(re.escape(tok_up), na=False)
+                    fasta_hit = fasta_s.str.contains(re.escape(tok_up), na=False)
+                cand = de.index[gene_hit | id_hit | fasta_hit | theme_hit]
                 if len(cand):
                     hit_idx = cand
                     break
