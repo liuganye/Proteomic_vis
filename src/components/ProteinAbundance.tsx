@@ -92,7 +92,7 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
             const selected = selectedSamples.includes(point.sample_id);
             return <tr key={point.sample_id} className={`border-b border-slate-100 ${selected ? "bg-orange-50" : ""}`}>
               <td className="px-2 py-2"><button type="button" aria-pressed={selected} onClick={() => onSelectSamples([point.sample_id])} className="rounded border border-slate-300 px-2 py-1 text-left text-teal-900 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700">{point.sample_id}</button></td>
-              <td className="px-2 py-2">{point.display_group}</td><td className="px-2 py-2">{observed ? formatIntensity(point.log2_intensity) : "—"}</td><td className="px-2 py-2">{observed ? "Observed" : "Missing"}</td>
+              <td className="px-2 py-2">{point.display_group}</td><td className="px-2 py-2">{isObserved(point.log2_intensity) ? formatIntensity(point.log2_intensity) : "—"}</td><td className="px-2 py-2">{observed ? "Observed" : "Missing"}</td>
             </tr>;
           })}</tbody>
         </table>
