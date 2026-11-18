@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnalysisWorkspace } from "./AnalysisWorkspace";
 import type { WorkspaceModuleId } from "@/lib/workspace-layout";
 import { RealVolcanoPlot } from "./RealVolcanoPlot";
 import { filterRealResults, inVolcanoBrush, passesVolcanoFilters, RESULT_PAGE_SIZE, type ExploreState } from "@/lib/visualization";
 import { RealResultsTable } from "./RealResultsTable";
 import { ProteinAbundance } from "./ProteinAbundance";
+import { ProteinStructure } from "./ProteinStructure";
 import { ProteinPicker } from "./ProteinPicker";
 import { ProteinFocusControls } from "./ProteinFocusControls";
 import type { SampleSelectionProps } from "@/lib/types";
@@ -120,7 +121,7 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
         <NetworkGraph network={network} focus={focus} onChoose={choose} candidateIds={hasFilters ? matchingIds : undefined} />
       </>}
     </section>),
-    structure: detail ? <Structure detail={detail}/> : evidenceState,
+    structure: detail ? <ProteinStructure key={detail.protein_id} proteinId={detail.protein_id} references={detail.structures}/> : evidenceState,
     go: <section className="go-pending" aria-labelledby="go-pending-heading">
       <span className="go-status">Analysis not connected</span>
       <h3 id="go-pending-heading">Functional themes of your candidates</h3>
@@ -193,13 +194,3 @@ function NetworkGraph({ network, focus, onChoose, candidateIds }: { network: Net
   </>;
 }
 
-function Structure({detail}: {detail: Detail}) {
-  const local = detail.structures.find(s => s.local_available && s.download_url);
-  return <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6"><h3 className="text-lg font-semibold">Structure</h3>{local ? <><p className="mt-1 text-sm text-slate-600">Local PDB {local.pdb_id} · Cα trace. Drag to rotate; use the zoom buttons.</p><StructureCanvas url={`${API}${local.download_url}`} key={local.pdb_id}/></> : <p className="mt-2 text-sm text-slate-600">{detail.structure_status === "reference_only" ? "PDB references exist, but coordinates are not packaged locally." : "No PDB reference is available in the dataset."}</p>}{detail.structures.length > 0 && <p className="mt-2 text-xs text-slate-600">References: {detail.structures.map(s => s.pdb_id).join(", ")}</p>}</section>;
-}
-function StructureCanvas({url}: {url: string}) {
-  const canvas = useRef<HTMLCanvasElement>(null); const [atoms,setAtoms] = useState<number[][]>([]); const [angle,setAngle] = useState([0.4,0.3]); const [zoom,setZoom] = useState(1); const [err,setErr] = useState(""); const drag = useRef<{x:number;y:number}|null>(null);
-  useEffect(()=>{const c=new AbortController(); fetch(url,{signal:c.signal}).then(r=>{if(!r.ok) throw Error();return r.text();}).then(text=>{const rows=text.split(/\r?\n/).filter(l=>l.startsWith("ATOM  ") && l.slice(12,16).trim()==="CA" && (l[16]===" " || l[16]==="A")); setAtoms(rows.map(l=>[Number(l.slice(30,38)),Number(l.slice(38,46)),Number(l.slice(46,54))]).filter(a=>a.every(Number.isFinite)));}).catch(e=>{if(e.name!=="AbortError") setErr("Could not load local coordinates.");}); return()=>c.abort();},[url]);
-  useEffect(()=>{const ctx=canvas.current?.getContext("2d"); if(!ctx || !atoms.length)return; ctx.clearRect(0,0,600,340); const center=[0,1,2].map(i=>atoms.reduce((s,a)=>s+a[i],0)/atoms.length); const xyz=atoms.map(a=>{const x=a[0]-center[0],y=a[1]-center[1],z=a[2]-center[2]; const x1=x*Math.cos(angle[0])+z*Math.sin(angle[0]), z1=-x*Math.sin(angle[0])+z*Math.cos(angle[0]); return [x1,y*Math.cos(angle[1])-z1*Math.sin(angle[1])];}); const extent=Math.max(...xyz.flatMap(a=>a.map(Math.abs)),1); const scale=145/extent*zoom; ctx.strokeStyle="#0f766e";ctx.lineWidth=1.4;ctx.beginPath();xyz.forEach((p,i)=>{if(i===0 || Math.hypot(...atoms[i].map((v,j)=>v-atoms[i-1][j]))>8)ctx.moveTo(300+p[0]*scale,170+p[1]*scale);else ctx.lineTo(300+p[0]*scale,170+p[1]*scale);});ctx.stroke();},[atoms,angle,zoom]);
-  return <><canvas ref={canvas} width={600} height={340} className="mt-3 w-full touch-none rounded-lg bg-slate-50" aria-label="Rotatable protein structure C alpha trace" onPointerDown={e=>{drag.current={x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current){const d=drag.current;setAngle(a=>[a[0]+(e.clientX-d.x)*0.01,a[1]+(e.clientY-d.y)*0.01]);drag.current={x:e.clientX,y:e.clientY};}}} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}/><div className="mt-2 flex gap-2 text-sm"><button className="rounded border px-3 py-1" onClick={()=>setZoom(z=>Math.min(z*1.2,4))}>Zoom in</button><button className="rounded border px-3 py-1" onClick={()=>setZoom(z=>Math.max(z/1.2,0.4))}>Zoom out</button><button className="rounded border px-3 py-1" onClick={()=>{setZoom(1);setAngle([0.4,0.3]);}}>Reset view</button></div>{err && <p role="alert">{err}</p>}{!err && !atoms.length && <p className="text-sm">Loading coordinates…</p>}</>;
-}

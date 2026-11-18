@@ -95,5 +95,10 @@ def dataset_dir(tmp_path):
 
 @pytest.fixture
 def client(dataset_dir):
-    with TestClient(create_app(Settings(data_dir=dataset_dir))) as test_client:
+    settings = Settings(
+        data_dir=dataset_dir,
+        structure_cache_dir=dataset_dir / "structure-cache",
+        structure_online=False,  # tests never touch the network; see test_structures.py
+    )
+    with TestClient(create_app(settings)) as test_client:
         yield test_client

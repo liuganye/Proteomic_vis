@@ -8,7 +8,7 @@ export const WORKSPACE_MODULES = [
   { id: "abundance", title: "Sample abundance", description: "Check the focused protein", group: "Protein evidence", w: 12, h: 6, minW: 4, minH: 5 },
   { id: "details", title: "Protein details", description: "Identity, annotation and sequence", group: "Protein evidence", w: 6, h: 7, minW: 4, minH: 4 },
   { id: "network", title: "STRING network", description: "Explore functional associations", group: "Protein evidence", w: 6, h: 10, minW: 4, minH: 6 },
-  { id: "structure", title: "Protein structure", description: "Inspect available local coordinates", group: "Protein evidence", w: 6, h: 8, minW: 4, minH: 5 },
+  { id: "structure", title: "Protein structure", description: "Best available experimental or predicted structure", group: "Protein evidence", w: 6, h: 8, minW: 4, minH: 5 },
   { id: "go", title: "GO enrichment", description: "Functional themes · not connected", group: "Functional analysis", w: 6, h: 6, minW: 4, minH: 4 },
 ] as const;
 export type WorkspaceModuleId = typeof WORKSPACE_MODULES[number]["id"];

@@ -26,3 +26,6 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+
+# Downloaded structure models (PDB/AlphaFold) cached by the backend
+/.cache/
