@@ -14,12 +14,14 @@ from close_loop_run.analysis.ingest import ingest_matrix
 from close_loop_run.analysis.ingest import _detect_intensity_columns, _filter_contaminants
 from close_loop_run.analysis.stats import (
     abundance_means,
+    fraction_changed_diagnostic,
     group_load_diagnostics,
     median_center_samples,
     nan_frequency,
     run_differential,
     se_low_tech_bio,
     species_ratio_diagnostics,
+    theme_direction_summary,
 )
 from close_loop_run.config import deep_get
 
@@ -176,7 +178,10 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     diag_cfg = cfg.get("diagnostics", {}) or {}
     species_diag = None
     if diag_cfg.get("species_ratios", False):
-        species_diag = species_ratio_diagnostics(de)
+        species_diag = species_ratio_diagnostics(
+            de,
+            abundance_tertiles=bool(diag_cfg.get("species_ratio_abundance_tertiles", False)),
+        )
         (analysis_dir / "species_ratio_diagnostics.json").write_text(
             json.dumps(species_diag, indent=2), encoding="utf-8"
         )
@@ -207,6 +212,28 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         )
         (analysis_dir / "group_load_diagnostics.json").write_text(
             json.dumps(group_load, indent=2), encoding="utf-8"
+        )
+
+    theme_dir = None
+    if diag_cfg.get("theme_direction", False):
+        theme_dir = theme_direction_summary(
+            de,
+            alpha=float(diag_cfg.get("theme_direction_alpha", alpha)),
+            abs_log2_fc_cutoff=float(diag_cfg.get("theme_direction_abs_log2_fc", 0.585)),
+        )
+        (analysis_dir / "theme_direction_summary.json").write_text(
+            json.dumps(theme_dir, indent=2), encoding="utf-8"
+        )
+
+    frac_changed = None
+    if diag_cfg.get("fraction_changed", False):
+        frac_changed = fraction_changed_diagnostic(
+            de,
+            fold_cutoff=float(diag_cfg.get("fraction_changed_fold_cutoff", 1.5)),
+            alpha=float(diag_cfg.get("fraction_changed_alpha", alpha)),
+        )
+        (analysis_dir / "fraction_changed_diagnostics.json").write_text(
+            json.dumps(frac_changed, indent=2), encoding="utf-8"
         )
 
     de_path = analysis_dir / "contrast_welch_bh.csv"
@@ -272,6 +299,8 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "theme_keyword_counts_among_sig": theme_summary,
         "species_ratio_diagnostics": species_diag,
         "group_load_diagnostics": group_load,
+        "theme_direction_summary": theme_dir,
+        "fraction_changed_diagnostics": frac_changed,
         "top_significant": [
             {
                 "protein": str(r["Protein ID"]),
@@ -305,14 +334,28 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     if species_diag and species_diag.get("enabled"):
         summary_lines.append("## Species-stratified median ratios")
         summary_lines.append("")
-        summary_lines.append("| Organism | n | median log2FC | median fold (treat/ctrl) |")
-        summary_lines.append("| --- | ---: | ---: | ---: |")
+        summary_lines.append("| Organism | n | median log2FC | median fold (treat/ctrl) | MAD log2FC |")
+        summary_lines.append("| --- | ---: | ---: | ---: | ---: |")
         for org, st in species_diag.get("by_organism", {}).items():
+            mad = st.get("mad_log2FC")
+            mad_s = f"{mad:.3f}" if mad is not None else "—"
             summary_lines.append(
                 f"| {org} | {st['n']} | {st['median_log2FC']:.3f} | "
-                f"{st['median_fold_treatment_over_control']:.3f} |"
+                f"{st['median_fold_treatment_over_control']:.3f} | {mad_s} |"
             )
         summary_lines.append("")
+        at = species_diag.get("abundance_tertiles") or {}
+        if at.get("enabled"):
+            summary_lines.append("## Species × abundance-tertile ratios")
+            summary_lines.append("")
+            summary_lines.append("| Organism::tertile | n | median fold | MAD log2FC |")
+            summary_lines.append("| --- | ---: | ---: | ---: |")
+            for key, st in sorted(at.get("by_organism_tertile", {}).items()):
+                summary_lines.append(
+                    f"| {key} | {st['n']} | {st['median_fold_treatment_over_control']:.3f} | "
+                    f"{st.get('mad_log2FC', float('nan')):.3f} |"
+                )
+            summary_lines.append("")
     if theme_summary:
         summary_lines.append("## Theme keywords among significant")
         summary_lines.append("")
@@ -333,6 +376,31 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         )
         summary_lines.append(
             f"- Load ratio (treatment/control): **{group_load['load_ratio_treatment_over_control']:.3f}**"
+        )
+        summary_lines.append("")
+    if theme_dir and theme_dir.get("enabled"):
+        summary_lines.append("## Theme direction among significant")
+        summary_lines.append("")
+        summary_lines.append("| Theme | n | up | down |")
+        summary_lines.append("| --- | ---: | ---: | ---: |")
+        for k, st in sorted(theme_dir.get("by_theme", {}).items(), key=lambda kv: -kv[1]["n"]):
+            summary_lines.append(f"| `{k}` | {st['n']} | {st['n_up']} | {st['n_down']} |")
+        summary_lines.append("")
+    if frac_changed and frac_changed.get("enabled"):
+        summary_lines.append("## Fraction changed at fold cutoff")
+        summary_lines.append("")
+        summary_lines.append(
+            f"- Tested: **{frac_changed['n_tested']}**; |fold|≥{frac_changed['fold_cutoff']}: "
+            f"**{frac_changed['n_abs_fold_ge_cutoff']}** "
+            f"({100*frac_changed['frac_abs_fold_ge_cutoff']:.1f}%)"
+        )
+        summary_lines.append(
+            f"- Unchanged at fold cutoff: **{frac_changed['n_unchanged_at_fold_cutoff']}**"
+        )
+        summary_lines.append(
+            f"- |fold|≥cutoff ∧ q<{frac_changed['alpha']}: "
+            f"**{frac_changed['n_abs_fold_and_q']}** "
+            f"({100*frac_changed['frac_abs_fold_and_q']:.1f}%)"
         )
         summary_lines.append("")
     summary_lines.append("## Top significant proteins")

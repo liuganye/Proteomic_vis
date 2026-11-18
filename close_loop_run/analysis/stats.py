@@ -272,32 +272,148 @@ def run_differential(
     )
 
 
+def _organism_ratio_stats(fc: pd.Series) -> dict:
+    fc = fc.astype(float)
+    fc = fc[np.isfinite(fc)]
+    if fc.empty:
+        return {}
+    folds = np.power(2.0, fc.to_numpy())
+    return {
+        "n": int(fc.size),
+        "median_log2FC": float(np.median(fc)),
+        "median_fold_treatment_over_control": float(np.median(folds)),
+        "frac_abs_log2FC_lt_0.5": float(np.mean(np.abs(fc) < 0.5)),
+        "frac_log2FC_within_0.5_of_log2_3": float(
+            np.mean(np.abs(fc - np.log2(3.0)) <= 0.5)
+        ),
+        "mad_log2FC": float(np.median(np.abs(fc - np.median(fc)))),
+    }
+
+
 def species_ratio_diagnostics(
     de: pd.DataFrame,
     *,
     organism_col: str = "organism_inferred",
     log2fc_col: str = "log2FC",
+    abundance_col: str = "abundance_log2_mean",
+    abundance_tertiles: bool = False,
 ) -> dict:
     """Median fold ratios stratified by inferred organism (pair-01 style)."""
     if organism_col not in de.columns:
         return {"enabled": False, "reason": f"missing {organism_col}"}
-    out: dict = {"enabled": True, "by_organism": {}}
+    out: dict = {"enabled": True, "by_organism": {}, "abundance_tertiles": None}
     for org, sub in de.groupby(organism_col):
-        fc = sub[log2fc_col].astype(float)
-        fc = fc[np.isfinite(fc)]
-        if fc.empty:
-            continue
-        folds = np.power(2.0, fc.to_numpy())
-        out["by_organism"][str(org)] = {
-            "n": int(fc.size),
-            "median_log2FC": float(np.median(fc)),
-            "median_fold_treatment_over_control": float(np.median(folds)),
-            "frac_abs_log2FC_lt_0.5": float(np.mean(np.abs(fc) < 0.5)),
-            "frac_log2FC_within_0.5_of_log2_3": float(
-                np.mean(np.abs(fc - np.log2(3.0)) <= 0.5)
-            ),
+        stats = _organism_ratio_stats(sub[log2fc_col])
+        if stats:
+            out["by_organism"][str(org)] = stats
+
+    # Optional abundance × organism precision view (paper claim: better at high abundance)
+    if abundance_tertiles and abundance_col in de.columns:
+        work = de[[organism_col, log2fc_col, abundance_col]].copy()
+        work = work[np.isfinite(work[abundance_col].astype(float))]
+        tert: dict = {}
+        try:
+            work["abund_tertile"] = pd.qcut(
+                work[abundance_col].astype(float), q=3, labels=["low", "mid", "high"], duplicates="drop"
+            )
+        except ValueError:
+            out["abundance_tertiles"] = {"enabled": False, "reason": "qcut_failed"}
+            return out
+        for (org, band), sub in work.groupby([organism_col, "abund_tertile"], observed=True):
+            key = f"{org}::{band}"
+            stats = _organism_ratio_stats(sub[log2fc_col])
+            if stats:
+                tert[key] = stats
+        # Precision proxy: MAD of log2FC should shrink for E. coli at high abundance if claim holds
+        out["abundance_tertiles"] = {
+            "enabled": True,
+            "by_organism_tertile": tert,
+            "note": "mad_log2FC is a precision proxy; median_fold should approach 3 (E. coli) / 1 (human) at high abundance if MaxLFQ recovers ratios.",
         }
     return out
+
+
+def theme_direction_summary(
+    de: pd.DataFrame,
+    *,
+    theme_col: str = "theme_keywords",
+    log2fc_col: str = "log2FC",
+    adj_p_col: str = "adj_p",
+    alpha: float = 0.05,
+    abs_log2_fc_cutoff: float = 0.585,
+) -> dict:
+    """Per-theme up/down counts among significant proteins (pair-02 style)."""
+    if theme_col not in de.columns:
+        return {"enabled": False, "reason": f"missing {theme_col}"}
+    mask = (
+        de[adj_p_col].notna()
+        & (de[adj_p_col] < alpha)
+        & (de[log2fc_col].abs() > abs_log2_fc_cutoff)
+    )
+    sig = de.loc[mask]
+    by_theme: dict = {}
+    for _, row in sig.iterrows():
+        themes = [t for t in str(row.get(theme_col) or "").split(";") if t]
+        fc = float(row[log2fc_col])
+        for t in themes:
+            slot = by_theme.setdefault(t, {"n": 0, "n_up": 0, "n_down": 0, "examples": []})
+            slot["n"] += 1
+            if fc > 0:
+                slot["n_up"] += 1
+            elif fc < 0:
+                slot["n_down"] += 1
+            if len(slot["examples"]) < 3:
+                slot["examples"].append(
+                    {
+                        "protein": str(row.get("Protein", row.get("Protein ID", ""))),
+                        "log2FC": fc,
+                        "adj_p": float(row[adj_p_col]),
+                    }
+                )
+    return {
+        "enabled": True,
+        "alpha": alpha,
+        "abs_log2_fc_cutoff": abs_log2_fc_cutoff,
+        "by_theme": by_theme,
+    }
+
+
+def fraction_changed_diagnostic(
+    de: pd.DataFrame,
+    *,
+    log2fc_col: str = "log2FC",
+    adj_p_col: str = "adj_p",
+    fold_cutoff: float = 1.5,
+    alpha: float = 0.05,
+) -> dict:
+    """
+    Fraction of tested proteins exceeding |fold| and BH q (pair-03 'most differ' claim).
+    """
+    if log2fc_col not in de.columns or adj_p_col not in de.columns:
+        return {"enabled": False, "reason": "missing DE columns"}
+    tested = de[de[adj_p_col].notna() & de[log2fc_col].notna()].copy()
+    n = int(len(tested))
+    if n == 0:
+        return {"enabled": False, "reason": "no_tested"}
+    abs_l2 = float(np.log2(fold_cutoff))
+    fold_mask = tested[log2fc_col].abs() >= abs_l2
+    q_mask = tested[adj_p_col] < alpha
+    both = fold_mask & q_mask
+    n_fold = int(fold_mask.sum())
+    n_both = int(both.sum())
+    return {
+        "enabled": True,
+        "n_tested": n,
+        "fold_cutoff": fold_cutoff,
+        "abs_log2_fc_cutoff": abs_l2,
+        "alpha": alpha,
+        "n_abs_fold_ge_cutoff": n_fold,
+        "frac_abs_fold_ge_cutoff": float(n_fold / n),
+        "n_abs_fold_and_q": n_both,
+        "frac_abs_fold_and_q": float(n_both / n),
+        "n_unchanged_at_fold_cutoff": int((~fold_mask).sum()),
+        "note": "Paper-style 'unchanged at 1.5-fold' ≈ n_tested - n_abs_fold_ge_cutoff (ignoring q).",
+    }
 
 
 def group_load_diagnostics(

@@ -70,6 +70,8 @@ annotation:
 
 diagnostics:
   species_ratios: true
+  # Iter1 Agent5: abundance × organism precision view for MaxLFQ ratio claim
+  species_ratio_abundance_tertiles: true
 
 tech_bio:
   enabled: true

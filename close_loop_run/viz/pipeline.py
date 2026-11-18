@@ -178,17 +178,27 @@ def run_viz(
             if "theme_keywords" in de.columns
             else pd.Series([""] * len(de), index=de.index)
         )
+        # Optional aliases: { canonical: [synonym, ...] } searched alongside each id
+        alias_map = markers_cfg.get("aliases") or {}
         for raw in wants:
             token = str(raw).strip()
             if not token:
                 continue
-            tok_up = token.upper()
-            hit_idx = de.index[
-                de_genes.str.contains(rf"(?:^|;){re.escape(tok_up)}(?:;|$)", na=False)
-                | de_ids_up.str.contains(re.escape(tok_up), na=False)
-                | fasta_s.str.contains(re.escape(tok_up), na=False)
-                | theme_s.str.contains(re.escape(tok_up), na=False)
-            ]
+            tokens = [token] + [str(a).strip() for a in (alias_map.get(token) or []) if str(a).strip()]
+            hit_idx = None
+            for tok in tokens:
+                tok_up = tok.upper()
+                cand = de.index[
+                    de_genes.str.contains(rf"(?:^|;){re.escape(tok_up)}(?:;|$)", na=False)
+                    | de_ids_up.str.contains(re.escape(tok_up), na=False)
+                    | fasta_s.str.contains(re.escape(tok_up), na=False)
+                    | theme_s.str.contains(re.escape(tok_up), na=False)
+                ]
+                if len(cand):
+                    hit_idx = cand
+                    break
+            if hit_idx is None:
+                hit_idx = de.index[[]]
             if len(hit_idx) == 0:
                 rows.append(
                     {
