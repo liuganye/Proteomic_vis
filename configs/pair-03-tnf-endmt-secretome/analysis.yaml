@@ -67,6 +67,11 @@ annotation:
   gene_column: Gene names
   fasta_header_column: Fasta headers
 
+diagnostics:
+  # Paper reports ~3× secreted protein load at 48 h by iBAQ; keep DE on LFQ
+  group_load: true
+  group_load_intensity_mode: ibaq
+
 tech_bio:
   enabled: false
 

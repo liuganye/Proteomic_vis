@@ -300,6 +300,50 @@ def species_ratio_diagnostics(
     return out
 
 
+def group_load_diagnostics(
+    linear_matrix: pd.DataFrame,
+    control_cols: list[str],
+    treatment_cols: list[str],
+    *,
+    intensity_mode: str = "lfq",
+) -> dict:
+    """
+    Sample/group total secreted (or cellular) protein load from linear intensities.
+
+    Useful for secretome papers that report bulk iBAQ/LFQ load ratios
+    (e.g. TNF-α ~3× at 48 h) independent of per-protein DE.
+    """
+    missing = [c for c in control_cols + treatment_cols if c not in linear_matrix.columns]
+    if missing:
+        return {"enabled": False, "reason": f"missing columns: {missing}"}
+
+    per_sample: dict[str, float] = {}
+    for col in control_cols + treatment_cols:
+        vals = pd.to_numeric(linear_matrix[col], errors="coerce").to_numpy(dtype=float)
+        vals = vals[np.isfinite(vals) & (vals > 0)]
+        per_sample[col] = float(np.sum(vals)) if vals.size else 0.0
+
+    ctrl_loads = [per_sample[c] for c in control_cols]
+    treat_loads = [per_sample[c] for c in treatment_cols]
+    mean_ctrl = float(np.mean(ctrl_loads)) if ctrl_loads else float("nan")
+    mean_treat = float(np.mean(treat_loads)) if treat_loads else float("nan")
+    ratio = (
+        float(mean_treat / mean_ctrl)
+        if mean_ctrl and np.isfinite(mean_ctrl) and mean_ctrl > 0
+        else float("nan")
+    )
+    return {
+        "enabled": True,
+        "intensity_mode": intensity_mode,
+        "per_sample_total": per_sample,
+        "mean_control_total": mean_ctrl,
+        "mean_treatment_total": mean_treat,
+        "load_ratio_treatment_over_control": ratio,
+        "n_control_samples": len(control_cols),
+        "n_treatment_samples": len(treatment_cols),
+    }
+
+
 def se_low_tech_bio(se_df: pd.DataFrame, tertiles: int = 3) -> pd.DataFrame:
     """Optional cheap tech/bio: SE-low tertile = technical (fallback rule)."""
     out = se_df.copy()

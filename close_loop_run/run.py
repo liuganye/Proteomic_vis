@@ -77,6 +77,7 @@ def _mirror_artifacts(run_dir: Path, dest: Path, analysis_res: dict[str, Any], v
     _copy_file(arts.get("de.markers"), text / "markers.json")
     analysis_dir = Path(analysis_res.get("analysis_dir") or (run_dir / "analysis"))
     _copy_file(analysis_dir / "species_ratio_diagnostics.json", text / "species_ratio_diagnostics.json")
+    _copy_file(analysis_dir / "group_load_diagnostics.json", text / "group_load_diagnostics.json")
     _copy_file(analysis_res.get("exploratory_table"), tables / "significant_exploratory.csv")
     _copy_file(analysis_res.get("protein_annotation"), tables / "protein_annotation.csv")
     _copy_file(arts.get("de.sig_table_adaptive"), tables / "significant_adaptive.tsv")

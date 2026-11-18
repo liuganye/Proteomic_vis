@@ -11,8 +11,10 @@ import pandas as pd
 from close_loop_run.analysis.annotate import DEFAULT_THEME_KEYWORDS, build_annotation_frame
 from close_loop_run.analysis.impute import impute_methods
 from close_loop_run.analysis.ingest import ingest_matrix
+from close_loop_run.analysis.ingest import _detect_intensity_columns, _filter_contaminants
 from close_loop_run.analysis.stats import (
     abundance_means,
+    group_load_diagnostics,
     median_center_samples,
     nan_frequency,
     run_differential,
@@ -20,6 +22,48 @@ from close_loop_run.analysis.stats import (
     species_ratio_diagnostics,
 )
 from close_loop_run.config import deep_get
+
+
+def _linear_matrix_for_load(
+    cfg: dict[str, Any],
+    *,
+    intensity_mode: str,
+    control_cols: list[str],
+    treatment_cols: list[str],
+) -> pd.DataFrame | None:
+    """Re-resolve linear intensity columns for group-load (may differ from DE mode)."""
+    ds = cfg.get("dataset", {}) or {}
+    samples = cfg.get("samples", {}) or {}
+    filters = cfg.get("filters", {}) or {}
+    matrix_path = Path(ds["matrix_path"])
+    fmt = (ds.get("format") or matrix_path.suffix.lstrip(".")).lower()
+    sep = "\t" if fmt in ("tsv", "txt", "") else ","
+    df = pd.read_csv(matrix_path, sep=sep, low_memory=False)
+    protein_col = ds.get("protein_col") or "Majority protein IDs"
+    if protein_col not in df.columns:
+        for cand in ("Majority protein IDs", "Protein IDs", "Protein"):
+            if cand in df.columns:
+                protein_col = cand
+                break
+    column_groups = dict(samples.get("column_groups") or {})
+    try:
+        resolved = _detect_intensity_columns(
+            df,
+            column_groups,
+            intensity_prefix=ds.get("intensity_prefix"),
+            intensity_mode=intensity_mode,
+        )
+    except KeyError:
+        return None
+    df = _filter_contaminants(df, protein_col, filters.get("contam_filter", "maxquant_or_fragpipe"))
+    out = df[[protein_col, *[resolved[k] for k in control_cols + treatment_cols]]].copy()
+    rename = {protein_col: "Protein", **{resolved[k]: k for k in control_cols + treatment_cols}}
+    out = out.rename(columns=rename)
+    for col in control_cols + treatment_cols:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+        if filters.get("zeros_as_nan", True):
+            out.loc[out[col] <= 0, col] = pd.NA
+    return out.groupby("Protein", as_index=False).max()
 
 
 def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
@@ -137,6 +181,34 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
             json.dumps(species_diag, indent=2), encoding="utf-8"
         )
 
+    # Group total-intensity load (pair-03 secretome bulk load; optional alt quant mode)
+    group_load = None
+    if diag_cfg.get("group_load", False):
+        load_mode = str(
+            diag_cfg.get("group_load_intensity_mode")
+            or ingested.get("intensity_mode")
+            or "lfq"
+        )
+        load_matrix = matrix
+        if load_mode.lower() != str(ingested.get("intensity_mode", "lfq")).lower():
+            alt = _linear_matrix_for_load(
+                cfg,
+                intensity_mode=load_mode,
+                control_cols=control_cols,
+                treatment_cols=treatment_cols,
+            )
+            if alt is not None:
+                load_matrix = alt
+        group_load = group_load_diagnostics(
+            load_matrix,
+            control_cols,
+            treatment_cols,
+            intensity_mode=load_mode,
+        )
+        (analysis_dir / "group_load_diagnostics.json").write_text(
+            json.dumps(group_load, indent=2), encoding="utf-8"
+        )
+
     de_path = analysis_dir / "contrast_welch_bh.csv"
     de_export = de.rename(columns={"Protein": "Protein ID"})
     if "Gene" not in de_export.columns or de_export["Gene"].fillna("").eq("").all():
@@ -199,6 +271,7 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "median_abs_log2FC_sig": float(sig["log2FC"].abs().median()) if n_sig else None,
         "theme_keyword_counts_among_sig": theme_summary,
         "species_ratio_diagnostics": species_diag,
+        "group_load_diagnostics": group_load,
         "top_significant": [
             {
                 "protein": str(r["Protein ID"]),
@@ -245,6 +318,22 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         summary_lines.append("")
         for k, v in sorted(theme_summary.items(), key=lambda kv: -kv[1]):
             summary_lines.append(f"- `{k}`: {v}")
+        summary_lines.append("")
+    if group_load and group_load.get("enabled"):
+        summary_lines.append("## Group total intensity load")
+        summary_lines.append("")
+        summary_lines.append(
+            f"- Quant for load: `{group_load.get('intensity_mode')}`"
+        )
+        summary_lines.append(
+            f"- Mean control total: **{group_load['mean_control_total']:.3e}**"
+        )
+        summary_lines.append(
+            f"- Mean treatment total: **{group_load['mean_treatment_total']:.3e}**"
+        )
+        summary_lines.append(
+            f"- Load ratio (treatment/control): **{group_load['load_ratio_treatment_over_control']:.3f}**"
+        )
         summary_lines.append("")
     summary_lines.append("## Top significant proteins")
     summary_lines.append("")
