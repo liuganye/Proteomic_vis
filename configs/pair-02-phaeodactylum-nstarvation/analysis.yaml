@@ -75,6 +75,13 @@ annotation:
     amino_acid_metabolism: ["amino.?acid", "glutamine", "glutamate", "urea", "arginase", "deaminase"]
     nitrogen_scavenging: ["nitrate", "nitrite", "urease", "amidase", "nitrogen"]
     fatty_acid_desaturase: ["desaturase", "palmitoyl", "acyl.?acp", "fatty acid"]
+    # Iter2+: finer carbon-rewiring / plastid FA markers
+    palmitoyl_acp_desaturase: ["palmitoyl", "acyl-ACP desaturase", "acyl.?ACP.?desaturase"]
+
+diagnostics:
+  # Iter2 Agent5: explicit up/down theme table for Interpreter
+  theme_direction: true
+  theme_direction_abs_log2_fc: 0.585
 
 tech_bio:
   enabled: false

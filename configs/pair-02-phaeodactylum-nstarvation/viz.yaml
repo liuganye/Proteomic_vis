@@ -51,10 +51,13 @@ markers:
   # Fasta/keyword proxies for paper themes (IDs may be Phatr accessions)
   ids:
     - desaturase
+    - palmitoyl
     - proteasome
     - glutamine
     - glutamate
     - ribosom
+  aliases:
+    palmitoyl: ["palmitoyl-ACP", "acyl-ACP desaturase"]
 
 exports:
   formats: [png, csv, json, md]
