@@ -29,7 +29,7 @@ npm run build && npm start
 | `combined_protein.tsv` | MaxLFQ intensities (`{sample} MaxLFQ Intensity`), optional `Log2 Fold Change` / `Adjusted P-value` |
 | `experiment_annotation.tsv` | `sample`, `condition` (e.g. Human / QC), optional `replicate` / `file` |
 
-**In-app mock data** ships under `public/mock-data/` (120 proteins × 7 samples with Human vs QC stats) so the app runs without a full omics disk.
+**In-app mock data** ships under `public/mock-data/` (120 proteins × 7 samples with synthetic Group A vs Group B stats) so the app runs without a full omics disk. Group A contains A_1–A_4 and Group B contains B_1–B_3. This is synthetic demo data, not a subset of the real HYE dataset; protein labels, intensities and statistical values must not be interpreted as experimental evidence. QC means quality control across all seven samples, not a sample group. The bundled JSON and public TSV copies use the same names.
 
 **Optional omics path** (when on the omics host):
 

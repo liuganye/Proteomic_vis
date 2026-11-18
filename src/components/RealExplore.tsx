@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AnalysisWorkspace } from "./AnalysisWorkspace";
+import type { WorkspaceModuleId } from "@/lib/workspace-layout";
 import { RealVolcanoPlot } from "./RealVolcanoPlot";
 import { filterRealResults, inVolcanoBrush, passesVolcanoFilters, RESULT_PAGE_SIZE, type ExploreState } from "@/lib/visualization";
 import { RealResultsTable } from "./RealResultsTable";
@@ -26,6 +28,8 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
   analysis: ExploreState; setAnalysis: (state: ExploreState) => void;
   focusResults: boolean; onReturnQc: () => void; totalProteins: number;
 } & SampleSelectionProps) {
+  const [reveal, setReveal] = useState<{ id: WorkspaceModuleId; token: number } | null>(null);
+  const openPanel = (id: WorkspaceModuleId) => setReveal(previous => ({ id, token: (previous?.token ?? 0) + 1 }));
   const [points, setPoints] = useState<Point[]>([]);
   const [evidence, setEvidence] = useState<{ focus: string; detail: Detail; abundance: Abundance } | null>(null);
   const [evidenceError, setEvidenceError] = useState<{ focus: string; message: string } | null>(null);
@@ -55,7 +59,7 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
     return () => c.abort();
   }, [resultsRetry]);
   useEffect(() => {
-    if (focusResults && resultsStatus === "ready") document.getElementById("real-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (focusResults && resultsStatus === "ready") setReveal(previous => ({ id: "results", token: (previous?.token ?? 0) + 1 }));
   }, [focusResults, resultsStatus]);
   useEffect(() => {
     const c = new AbortController();
@@ -82,20 +86,12 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
     const index = rows.findIndex(p => p.protein_id === id);
     if (index >= 0) updateAnalysis({ page: Math.floor(index / RESULT_PAGE_SIZE) });
   };
-  return <div className="space-y-6">
-    <header><h2 className="font-serif text-3xl">Explore real proteins</h2><p className="mt-2 text-sm text-slate-600">Human − QC · existing limma results · select a point or search by protein ID or gene.</p></header>
-    <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950" role="region" aria-label="Shared sample and protein selection">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p><strong>QC samples:</strong> {selectedSamples.length ? selectedSamples.join(" + ") : "None selected"}</p>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={onReturnQc} className="rounded border border-teal-700 px-3 py-1">Return to QC</button><button type="button" disabled={!selectedSamples.length} onClick={() => onSelectSamples([])} className="rounded border border-teal-700 px-3 py-1 disabled:opacity-40">Clear sample selection</button></div>
-      </div>
-      <div className="mt-3"><ProteinPicker apiOrigin={API} current={detail ?? selected ?? { protein_id: focus, gene: null, organism: "" }} candidates={rows} candidatesStatus={resultsStatus} totalProteins={totalProteins} onChoose={choose} /></div>
-    </div>
-    {resultsStatus === "loading" ? <p role="status">Loading imported Human − QC results…</p> : resultsStatus === "error" ? <div role="alert" className="rounded border border-red-300 bg-red-50 p-4"><p>Could not load the imported results. Check the backend connection.</p><button type="button" onClick={() => setResultsRetry(n => n + 1)} className="mt-2 rounded border px-3 py-1">Retry results</button></div> : <>
-      <RealVolcanoPlot points={points} focus={focus} onChoose={choose} pCutoff={pCutoff} fcCutoff={fcCutoff} setPCutoff={value => updateAnalysis({ pCutoff: value, page: 0 })} setFcCutoff={value => updateAnalysis({ fcCutoff: value, page: 0 })} brush={analysis.brush} onBrush={brush => updateAnalysis({ brush, page: 0 })} matchingIds={matchingIds} hasFilters={hasFilters} />
-      <RealResultsTable rows={rows} testedCount={points.length} brushedCount={points.filter(p => inVolcanoBrush(p, analysis.brush)).length} state={analysis} update={updateAnalysis} focus={focus} focusIsTested={!!selected} onChoose={id => { choose(id); document.getElementById("protein-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
-    </>}
-    <section id="protein-evidence" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-4 sm:p-6" aria-labelledby="protein-evidence-heading">
+  const resultsState = resultsStatus === "loading" ? <p role="status" className="p-5 text-sm">Loading imported Human − QC results…</p> : resultsStatus === "error" ? <div role="alert" className="p-5 text-sm"><p>Could not load imported results. Check the backend connection.</p><button type="button" onClick={() => setResultsRetry(n => n + 1)} className="mt-3 rounded border px-3 py-2">Retry results</button></div> : null;
+  const evidenceState = <div className="p-5 text-sm">{loading ? <p role="status">Loading evidence for {focus}…</p> : <><p role="alert">{error || "Evidence is unavailable for this protein."}</p><button type="button" className="mt-3 rounded border px-3 py-2" onClick={() => setEvidenceRetry(n => n+1)}>Retry protein evidence</button></>}</div>;
+  const panels: Record<WorkspaceModuleId, ReactNode> = {
+    volcano: resultsState ?? (<RealVolcanoPlot points={points} focus={focus} onChoose={choose} pCutoff={pCutoff} fcCutoff={fcCutoff} setPCutoff={value => updateAnalysis({ pCutoff: value, page: 0 })} setFcCutoff={value => updateAnalysis({ fcCutoff: value, page: 0 })} brush={analysis.brush} onBrush={brush => updateAnalysis({ brush, page: 0 })} matchingIds={matchingIds} hasFilters={hasFilters} onViewResults={() => openPanel("results")} />),
+    results: resultsState ?? (<RealResultsTable rows={rows} testedCount={points.length} brushedCount={points.filter(p => inVolcanoBrush(p, analysis.brush)).length} state={analysis} update={updateAnalysis} focus={focus} focusIsTested={!!selected} onChoose={id => { choose(id);  }} />),
+    details: (<section id="protein-evidence" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-4 sm:p-6" aria-labelledby="protein-evidence-heading">
       <h3 id="protein-evidence-heading" className="text-lg font-semibold">Focused protein</h3>
       <ProteinFocusControls apiOrigin={API} focus={focus} rows={rows} sort={analysis.sort} resultsStatus={resultsStatus} onChoose={choose} />
       <div className="min-h-40" aria-live="polite" aria-busy={loading}>
@@ -108,9 +104,9 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
         </>}
         {!loading && error && <div className="mt-3 text-sm"><p role="alert" className="text-red-800">{error}</p><button type="button" onClick={() => setEvidenceRetry(n => n + 1)} className="mt-2 rounded border border-slate-300 px-3 py-1">Retry protein evidence</button></div>}
       </div>
-    </section>
-    {abundance && <ProteinAbundance abundance={abundance} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples}/>}
-    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+    </section>),
+    abundance: abundance ? <ProteinAbundance abundance={abundance} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples}/> : evidenceState,
+    network: (<section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h3 className="text-lg font-semibold">STRING one-hop neighborhood</h3>
           <p className="mt-1 text-sm text-slate-600">Select a node to focus that protein. Edge width represents STRING confidence, not binding strength.</p></div>
@@ -123,9 +119,27 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
         {hasFilters && <p className="mt-2 text-xs text-slate-600">{network.nodes.filter(n => matchingIds.has(n.protein_id)).length} of {matchingIds.size} matching candidates appear in this local neighborhood. Orange outlines mark those candidates.</p>}
         <NetworkGraph network={network} focus={focus} onChoose={choose} candidateIds={hasFilters ? matchingIds : undefined} />
       </>}
-    </section>
-    {detail && <Structure detail={detail}/>}
-    <p className="text-xs leading-relaxed text-slate-500">This benchmark compares mixture abundances, not disease effects. Sample group labels and replicate types require review. The STRING export is incomplete.</p>
+    </section>),
+    structure: detail ? <Structure detail={detail}/> : evidenceState,
+    go: <section className="go-pending" aria-labelledby="go-pending-heading">
+      <span className="go-status">Analysis not connected</span>
+      <h3 id="go-pending-heading">Functional themes of your candidates</h3>
+      <p>GO enrichment will compare a candidate gene set with an appropriate background, separately for each species.</p>
+      <dl><div><dt>Current candidate proteins</dt><dd>{resultsStatus === "ready" ? rows.length.toLocaleString() : "Results unavailable"}</dd></div><div><dt>Planned views</dt><dd>Biological process · Molecular function · Cellular component</dd></div></dl>
+      <p className="go-next">GO annotations, ID mapping and enrichment computation have not been connected. No enrichment results are shown.</p>
+      <p className="text-xs text-slate-600">This panel can be placed and resized now. It follows the candidate set, not the single focused protein.</p>
+    </section>,
+  };
+  return <div>
+    <header className="workspace-page-heading"><div><h1>Downstream workspace</h1><p>Human − QC · imported results · arrange the views around your question.</p></div><span>Real dataset</span></header>
+    <AnalysisWorkspace reveal={reveal} context={(<div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950" role="region" aria-label="Shared sample and protein selection">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p><strong>QC samples:</strong> {selectedSamples.length ? selectedSamples.join(" + ") : "None selected"}</p>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={onReturnQc} className="rounded border border-teal-700 px-3 py-1">Return to QC</button><button type="button" disabled={!selectedSamples.length} onClick={() => onSelectSamples([])} className="rounded border border-teal-700 px-3 py-1 disabled:opacity-40">Clear sample selection</button></div>
+      </div>
+      <div className="mt-3"><ProteinPicker apiOrigin={API} current={detail ?? selected ?? { protein_id: focus, gene: null, organism: "" }} candidates={rows} candidatesStatus={resultsStatus} totalProteins={totalProteins} onChoose={choose} /></div>
+    </div>)} renderPanel={id => panels[id]}/>
+    <p className="mt-4 text-xs leading-relaxed text-slate-600">This benchmark compares mixture abundances, not disease effects. Sample group labels and replicate types require review. Layout changes do not recompute statistics.</p>
   </div>;
 }
 
