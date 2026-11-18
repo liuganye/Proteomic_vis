@@ -80,6 +80,7 @@ def _mirror_artifacts(run_dir: Path, dest: Path, analysis_res: dict[str, Any], v
     _copy_file(analysis_dir / "group_load_diagnostics.json", text / "group_load_diagnostics.json")
     _copy_file(analysis_dir / "theme_direction_summary.json", text / "theme_direction_summary.json")
     _copy_file(analysis_dir / "fraction_changed_diagnostics.json", text / "fraction_changed_diagnostics.json")
+    _copy_file(analysis_dir / "dap_threshold_grid.json", text / "dap_threshold_grid.json")
     _copy_file(analysis_res.get("exploratory_table"), tables / "significant_exploratory.csv")
     _copy_file(analysis_res.get("protein_annotation"), tables / "protein_annotation.csv")
     _copy_file(arts.get("de.sig_table_adaptive"), tables / "significant_adaptive.tsv")

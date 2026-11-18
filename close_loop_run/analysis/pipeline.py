@@ -14,6 +14,7 @@ from close_loop_run.analysis.ingest import ingest_matrix
 from close_loop_run.analysis.ingest import _detect_intensity_columns, _filter_contaminants
 from close_loop_run.analysis.stats import (
     abundance_means,
+    dap_threshold_grid,
     fraction_changed_diagnostic,
     group_load_diagnostics,
     median_center_samples,
@@ -242,6 +243,13 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
             json.dumps(frac_changed, indent=2), encoding="utf-8"
         )
 
+    dap_grid = None
+    if diag_cfg.get("dap_threshold_grid", False):
+        dap_grid = dap_threshold_grid(de, grid=diag_cfg.get("dap_threshold_grid_spec") or None)
+        (analysis_dir / "dap_threshold_grid.json").write_text(
+            json.dumps(dap_grid, indent=2), encoding="utf-8"
+        )
+
     de_path = analysis_dir / "contrast_welch_bh.csv"
     de_export = de.rename(columns={"Protein": "Protein ID"})
     if "Gene" not in de_export.columns or de_export["Gene"].fillna("").eq("").all():
@@ -307,6 +315,7 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "group_load_diagnostics": group_load,
         "theme_direction_summary": theme_dir,
         "fraction_changed_diagnostics": frac_changed,
+        "dap_threshold_grid": dap_grid,
         "top_significant": [
             {
                 "protein": str(r["Protein ID"]),
@@ -408,6 +417,17 @@ def run_analysis(cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
             f"**{frac_changed['n_abs_fold_and_q']}** "
             f"({100*frac_changed['frac_abs_fold_and_q']:.1f}%)"
         )
+        summary_lines.append("")
+    if dap_grid and dap_grid.get("enabled"):
+        summary_lines.append("## DAP counts at multiple thresholds")
+        summary_lines.append("")
+        summary_lines.append("| Label | alpha | |log2FC| cut | n | up | down |")
+        summary_lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+        for row in dap_grid.get("grid", []):
+            summary_lines.append(
+                f"| `{row['label']}` | {row['alpha']} | {row['abs_log2_fc_cutoff']} | "
+                f"{row['n']} | {row['n_up']} | {row['n_down']} |"
+            )
         summary_lines.append("")
     summary_lines.append("## Top significant proteins")
     summary_lines.append("")

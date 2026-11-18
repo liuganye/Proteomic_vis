@@ -82,6 +82,8 @@ diagnostics:
   # Iter2 Agent5: explicit up/down theme table for Interpreter
   theme_direction: true
   theme_direction_abs_log2_fc: 0.585
+  # Iter5 Agent5: multi-threshold DAP table (paper 384 vs pipeline cuts)
+  dap_threshold_grid: true
 
 tech_bio:
   enabled: false

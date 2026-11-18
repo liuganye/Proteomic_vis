@@ -378,6 +378,44 @@ def theme_direction_summary(
     }
 
 
+def dap_threshold_grid(
+    de: pd.DataFrame,
+    *,
+    log2fc_col: str = "log2FC",
+    adj_p_col: str = "adj_p",
+    grid: list[dict] | None = None,
+) -> dict:
+    """Report DAP counts at several (alpha, |log2FC|) cuts for Interpreter/Judge."""
+    if log2fc_col not in de.columns or adj_p_col not in de.columns:
+        return {"enabled": False, "reason": "missing DE columns"}
+    grid = grid or [
+        {"alpha": 0.05, "abs_log2_fc_cutoff": 0.585, "label": "primary_1.5fold"},
+        {"alpha": 0.05, "abs_log2_fc_cutoff": 0.0, "label": "q_only"},
+        {"alpha": 0.1, "abs_log2_fc_cutoff": 0.585, "label": "exploratory_q0.1_1.5fold"},
+        {"alpha": 0.05, "abs_log2_fc_cutoff": 1.0, "label": "strict_2fold"},
+    ]
+    rows = []
+    tested = de[de[adj_p_col].notna() & de[log2fc_col].notna()]
+    for g in grid:
+        a = float(g["alpha"])
+        fc = float(g["abs_log2_fc_cutoff"])
+        mask = tested[adj_p_col] < a
+        if fc > 0:
+            mask = mask & (tested[log2fc_col].abs() > fc)
+        sub = tested.loc[mask]
+        rows.append(
+            {
+                "label": g.get("label") or f"q<{a}_|fc|>{fc}",
+                "alpha": a,
+                "abs_log2_fc_cutoff": fc,
+                "n": int(len(sub)),
+                "n_up": int((sub[log2fc_col] > 0).sum()),
+                "n_down": int((sub[log2fc_col] < 0).sum()),
+            }
+        )
+    return {"enabled": True, "n_tested": int(len(tested)), "grid": rows}
+
+
 def fraction_changed_diagnostic(
     de: pd.DataFrame,
     *,
