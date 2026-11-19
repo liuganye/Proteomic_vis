@@ -42,6 +42,7 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
     tickLabels = domain.ticks.map(tick => formatIntensity(tick));
   }
 
+  const hasDomain = domain !== null;
   const chartRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 700, h: 242 });
   useEffect(() => {
@@ -63,7 +64,7 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [domain !== null]);
+  }, [hasDomain]);
 
   const abW = size.w;
   const abH = size.h;
