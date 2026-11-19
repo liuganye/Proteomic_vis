@@ -93,13 +93,22 @@ export function QcPanel({
   }, [focusPlotId, focusToken, jumpToPlot, plotsReady]);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
-        <p data-testid="qc-selected-samples" aria-live="polite"><strong>Selected samples:</strong> {selectedSamples.length ? selectedSamples.join(" + ") : "None"}</p>
-        <button type="button" onClick={() => onSelectSamples([])} disabled={!selectedSamples.length} className="rounded border border-slate-300 px-3 py-1 disabled:opacity-40">Clear sample selection</button>
-        <p className="w-full text-xs text-slate-600">Select a bar, point, or sample row in the built-in QC charts. A correlation cell selects both samples. Outlines mark selected samples across QC and protein abundance; the data and statistical analysis stay unchanged.</p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <p data-testid="qc-selected-samples" aria-live="polite">
+            <strong className="text-slate-700">Selected samples:</strong>{" "}
+            {selectedSamples.length ? selectedSamples.join(" + ") : "None"}
+          </p>
+          <button type="button" onClick={() => onSelectSamples([])} disabled={!selectedSamples.length} className="rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40 hover:bg-slate-50">Clear</button>
+        </div>
+        {dataset.source === "real" && (
+          <span id="qc-summary" className="rounded bg-teal-50 border border-teal-200 px-2 py-0.5 font-medium text-teal-900">
+            HYE snapshot · descriptive QC
+          </span>
+        )}
       </div>
-      {dataset.source === "real" ? <div id="qc-summary" className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"><strong>Real HYE dataset · descriptive QC</strong><p className="mt-1">Sample groups are inferred and unreviewed. Zero or blank intensities are treated as missing, without imputation. Cross-condition differences are not quality verdicts.</p></div> : <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />}
+      {dataset.source !== "real" && <QcSummary conclusions={bundle.conclusions} onJump={jumpToPlot} />}
 
       {!plotsReady ? (
         <p className="text-sm text-slate-500" role="status">
@@ -107,19 +116,13 @@ export function QcPanel({
         </p>
       ) : (
         <>
-          <section aria-labelledby="qc-conventional-heading" className="space-y-6">
-            <div className="border-b border-slate-200 pb-2">
-              <h2
-                id="qc-conventional-heading"
-                className="font-serif text-xl text-slate-900"
-              >
-                Conventional plots
-              </h2>
-              <p className="text-sm text-slate-600">
-                Standard FragPipe Analyst–style QC across all annotation groups:
-                missingness, intensity distribution, and sample correlation.
-              </p>
-            </div>
+          <section aria-labelledby="qc-conventional-heading" className="space-y-4">
+            <h2
+              id="qc-conventional-heading"
+              className="border-b border-slate-200 pb-1.5 font-serif text-lg text-slate-900"
+            >
+              Conventional QC plots
+            </h2>
 
             <PlotCard
               anchorId={BUILTIN_PLOT_ANCHOR.missingness}
@@ -162,19 +165,13 @@ export function QcPanel({
             </PlotCard>
           </section>
 
-          <section aria-labelledby="qc-custom-heading" className="space-y-6">
-            <div className="border-b border-amber-200/80 pb-2">
-              <h2
-                id="qc-custom-heading"
-                className="font-serif text-xl text-slate-900"
-              >
-                Custom plots
-              </h2>
-              <p className="text-sm text-slate-600">
-                Project-specific QC views plus user-defined charts from sample
-                metrics (scatter, bar, histogram).
-              </p>
-            </div>
+          <section aria-labelledby="qc-custom-heading" className="space-y-4">
+            <h2
+              id="qc-custom-heading"
+              className="border-b border-amber-200/80 pb-1.5 font-serif text-lg text-slate-900"
+            >
+              Custom QC plots
+            </h2>
 
             <PlotCard
               anchorId={BUILTIN_PLOT_ANCHOR["median-vs-missing"]}

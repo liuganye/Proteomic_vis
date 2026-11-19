@@ -128,4 +128,120 @@ test("real result candidates match the bundled limma values and retain VMA8 evid
   assert.equal(candidates[0].log2_fc, -2.01167269971667);
   assert.equal(candidates[0].adj_p, 1.19020518653977e-8);
   assert.equal(vis.filterRealResults(points, initial).length, 4375, "clearing selection restores all tested results");
+  const summary = vis.volcanoSummaryCounts(points, 0.05, 0.7);
+  assert.equal(summary.total, 4375);
+  assert.equal(summary.passing, 33);
+  assert.equal(summary.up + summary.down, 33);
+  assert.ok(summary.up > 0 && summary.down > 0);
+});
+
+test("volcano direction, z-order layering and callout selection prioritize focus and filtered candidates", () => {
+  assert.equal(vis.volcanoDirection({ log2_fc: 1.5, adj_p: 0.01 }, 0.05, 0.7), "up");
+  assert.equal(vis.volcanoDirection({ log2_fc: -1.5, adj_p: 0.01 }, 0.05, 0.7), "down");
+  assert.equal(vis.volcanoDirection({ log2_fc: 0.7, adj_p: 0.01 }, 0.05, 0.7), "ns");
+  assert.equal(vis.volcanoDirection({ log2_fc: 2.0, adj_p: 0.05 }, 0.05, 0.7), "ns");
+
+  const points = [
+    { protein_id: "FOCUS", gene: "G_FOCUS", log2_fc: 0.1, adj_p: 0.8 },
+    { protein_id: "NS", gene: "G_NS", log2_fc: 0.2, adj_p: 0.7 },
+    { protein_id: "NEIGHBOR", gene: "G_NB", log2_fc: 0.3, adj_p: 0.6 },
+    { protein_id: "UP", gene: "G_UP", log2_fc: 2.0, adj_p: 0.001 },
+    { protein_id: "MATCH", gene: "G_MATCH", log2_fc: -1.8, adj_p: 0.002 },
+  ];
+  const ordered = vis.orderVolcanoPoints(points, 0.05, 0.7, new Set(["MATCH"]), "FOCUS", true, new Set(["NEIGHBOR"]));
+  assert.deepEqual(ordered.map(p => p.protein_id), ["NS", "UP", "NEIGHBOR", "MATCH", "FOCUS"]);
+  assert.deepEqual(points.map(p => p.protein_id), ["FOCUS", "NS", "NEIGHBOR", "UP", "MATCH"], "ordering must not mutate input");
+  assert.equal(vis.LOCAL_STRUCTURE_PDB.O00148, "8IJU");
+  assert.equal(Object.keys(vis.LOCAL_STRUCTURE_PDB).length, 4);
+
+  const calloutsNoFilter = vis.selectVolcanoCallouts(points, {
+    pCutoff: 0.05,
+    fcCutoff: 0.7,
+    matchingIds: new Set(),
+    hasFilters: false,
+    focusId: "FOCUS",
+    maxCallouts: 6,
+  });
+  assert.deepEqual(calloutsNoFilter.map(p => p.protein_id), ["FOCUS", "UP", "MATCH"]);
+
+  const calloutsWithFilter = vis.selectVolcanoCallouts(points, {
+    pCutoff: 0.05,
+    fcCutoff: 0.7,
+    matchingIds: new Set(["MATCH"]),
+    hasFilters: true,
+    focusId: "FOCUS",
+    maxCallouts: 2,
+  });
+  assert.deepEqual(calloutsWithFilter.map(p => p.protein_id), ["FOCUS", "MATCH"]);
+});
+
+test("STRING layout maps higher confidence closer to center and places center at (500, 380)", () => {
+  const nodes = [
+    { protein_id: "CENTER" },
+    { protein_id: "LOW" },
+    { protein_id: "HIGH" },
+    { protein_id: "MID" },
+  ];
+  const edges = [
+    { source: "CENTER", target: "LOW", score: 0.4 },
+    { source: "CENTER", target: "HIGH", score: 0.95 },
+    { source: "CENTER", target: "MID", score: 0.7 },
+    { source: "HIGH", target: "MID", score: 0.8 },
+  ];
+  const layout = vis.layoutStringNeighborhood("CENTER", nodes, edges);
+  assert.deepEqual(
+    { x: layout.get("CENTER").x, y: layout.get("CENTER").y, radius: layout.get("CENTER").radius },
+    { x: 500, y: 380, radius: 0 },
+  );
+  assert.ok(layout.get("HIGH").radius < layout.get("MID").radius);
+  assert.ok(layout.get("MID").radius < layout.get("LOW").radius);
+  for (const id of ["HIGH", "MID", "LOW"]) {
+    const pos = layout.get(id);
+    assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y));
+  }
+});
+
+test("STRING sector grouping clusters co-regulated neighbors and curvedChordGeometry avoids center", () => {
+  const nodes = [
+    { protein_id: "CENTER" },
+    { protein_id: "U1" },
+    { protein_id: "D1" },
+    { protein_id: "U2" },
+    { protein_id: "X1" },
+  ];
+  const edges = [
+    { source: "CENTER", target: "U1", score: 0.9 },
+    { source: "CENTER", target: "D1", score: 0.9 },
+    { source: "CENTER", target: "U2", score: 0.8 },
+    { source: "CENTER", target: "X1", score: 0.7 },
+  ];
+  const groups = { U1: "up", U2: "up", D1: "down", X1: "untested" };
+  const grouped = vis.layoutStringNeighborhood("CENTER", nodes, edges, { groupBy: id => groups[id] });
+  assert.ok(grouped.get("U1").angle < grouped.get("D1").angle);
+  assert.ok(grouped.get("U2").angle < grouped.get("D1").angle);
+  assert.ok(grouped.get("D1").angle < grouped.get("X1").angle);
+
+  const chord = vis.curvedChordGeometry({ x: 300, y: 300 }, { x: 700, y: 300 }, 500, 300);
+  assert.ok(chord.d.startsWith("M 300.0 300.0 Q "));
+  assert.ok(Math.hypot(chord.midX - 500, chord.midY - 300) >= 30);
+
+  const rings = [{ r: 100, label: "1.0" }, { r: 150, label: "0.7" }];
+  const obstacleAtBottomRight = [{ x: 300 + 110 * Math.SQRT1_2, y: 300 + 110 * Math.SQRT1_2, halfW: 36, halfH: 26 }];
+  const placed = vis.pickRingLabelPositions(rings, 300, 300, {
+    obstacles: obstacleAtBottomRight,
+    spokes: [],
+    bounds: { width: 640, height: 600 },
+  });
+  assert.equal(placed.length, 2);
+  for (const item of placed) {
+    const dx = Math.abs(item.x - obstacleAtBottomRight[0].x);
+    const dy = Math.abs(item.y - obstacleAtBottomRight[0].y);
+    assert.ok(dx > 28 + 36 || dy > 8.5 + 26, "ring label must dodge obstacle box");
+  }
+
+  assert.equal(vis.stepSignificanceCutoff(1, -1), 0.5);
+  assert.equal(vis.stepSignificanceCutoff(0.05, 1), 0.1);
+  assert.equal(vis.stepSignificanceCutoff(0.05, -1), 0.02);
+  assert.equal(vis.stepFoldChangeCutoff(0.7, 1), 0.8);
+  assert.equal(vis.stepFoldChangeCutoff(0.05, -1), 0);
 });

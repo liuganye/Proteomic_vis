@@ -50,15 +50,13 @@ export function MissingnessPlot({
 
   return (
     <div>
-      <header className="mb-3">
-        <h3 className="text-lg font-semibold text-slate-900">
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
           Missingness by sample
         </h3>
-        <p className="text-sm text-slate-600">
-          Fraction of proteins with MaxLFQ intensity = 0 (treated as missing)
-          per sample. Samples ordered by annotation group; bars colored by
-          condition ({groups.length} group{groups.length === 1 ? "" : "s"}).
-        </p>
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          % MaxLFQ = 0 · {groups.length} group{groups.length === 1 ? "" : "s"}
+        </span>
       </header>
       <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Missingness by sample chart. Scroll horizontally to inspect all sample labels.">
       <div className="h-80 w-full" style={{ minWidth: Math.max(480, data.length * 18 + 80) }}>

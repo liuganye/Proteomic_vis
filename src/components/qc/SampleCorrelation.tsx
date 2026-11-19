@@ -24,15 +24,13 @@ export function SampleCorrelation({
 
   return (
     <div>
-      <header className="mb-3">
-        <h3 className="text-lg font-semibold text-slate-900">
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
           Sample correlation
         </h3>
-        <p className="text-sm text-slate-600">
-          Pairwise Pearson correlation of log<sub>10</sub>(MaxLFQ) across
-          proteins observed in both samples. Zero and blank values are excluded;
-          different pairs can use different sets of proteins. Samples are ordered by annotation group.
-        </p>
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          Pairwise Pearson r · log₁₀(MaxLFQ)
+        </span>
       </header>
 
       <ul className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600" aria-label="Sample groups">
@@ -105,10 +103,6 @@ export function SampleCorrelation({
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs text-slate-500">
-        Orange: negative correlation. Neutral: zero. Blue: positive correlation.
-        Select a label for one sample or a cell for both. Use arrow keys between cells and Enter to select. Outlines mark selected rows and columns. Scroll stays inside this matrix.
-      </p>
     </div>
   );
 }

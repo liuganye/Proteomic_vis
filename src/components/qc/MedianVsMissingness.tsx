@@ -46,18 +46,13 @@ export function MedianVsMissingness({
 
   return (
     <div>
-      <header className="mb-3">
-        <p className="text-xs font-semibold tracking-wide text-amber-800 uppercase">
-          Custom plot
-        </p>
-        <h3 className="text-lg font-semibold text-slate-900">
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
           Median intensity vs missingness
         </h3>
-        <p className="text-sm text-slate-600">
-          Project-specific QC: each sample plotted by % MaxLFQ missing (x) and
-          median log<sub>10</sub> MaxLFQ (y). Compare samples within suitable
-          experimental groups; composition can affect both measures.
-        </p>
+        <span className="rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-medium text-amber-900">
+          Sample overview · click dot
+        </span>
       </header>
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
