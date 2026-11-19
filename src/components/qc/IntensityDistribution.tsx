@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -19,6 +19,8 @@ import {
   missingnessBySample,
 } from "@/lib/stats";
 import type { FragPipeDataset, SampleSelectionProps } from "@/lib/types";
+import { SampleIntensitySummary } from "./SampleIntensitySummary";
+import { paddedDomain } from "@/lib/qc-plot";
 
 type BoxRow = ReturnType<typeof intensityBoxBySample>[number];
 
@@ -35,7 +37,17 @@ export function IntensityDistribution({
   groups?: ReturnType<typeof groupQcStats>;
   colorMap?: Record<string, string>;
 } & SampleSelectionProps) {
-  const histogram = useMemo(() => intensityHistogram(dataset), [dataset]);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [binCount, setBinCount] = useState(30);
+  const fullHistogram = useMemo(() => intensityHistogram(dataset, binCount), [dataset, binCount]);
+  const filteredDataset = useMemo(() => groupFilter ? {
+    ...dataset,
+    samples: dataset.samples.filter(sample => (dataset.annotation.find(a => a.sample === sample)?.condition ?? "Unknown") === groupFilter),
+  } : dataset, [dataset, groupFilter]);
+  const histogram = useMemo(() => {
+    if (!groupFilter || !fullHistogram.bins.length) return fullHistogram;
+    return intensityHistogram(filteredDataset, fullHistogram.bins.length, [fullHistogram.bins[0].lower, fullHistogram.bins[fullHistogram.bins.length - 1].upper]);
+  }, [filteredDataset, binCount, groupFilter, fullHistogram]);
   const hist = histogram.bins;
   const boxes = precomputedBoxes ?? intensityBoxBySample(dataset);
   const groups = useMemo(() => {
@@ -44,6 +56,7 @@ export function IntensityDistribution({
   }, [precomputedGroups, dataset, boxes]);
   const colorMap =
     colorMapProp ?? buildConditionColorMap(groups.map((g) => g.condition));
+  const visibleBoxes = boxes.filter(b => !groupFilter || b.condition === groupFilter);
 
   return (
     <div className="space-y-6">
@@ -56,16 +69,31 @@ export function IntensityDistribution({
             {histogram.total.toLocaleString()} observations · {hist.length} bins · no sampling
           </span>
         </header>
+        <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <label className="flex items-center gap-2">Intensity group
+            <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1.5">
+              <option value="">All groups</option>
+              {groups.map(g => <option key={g.condition} value={g.condition}>{g.condition}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">Histogram bins
+            <select value={binCount} onChange={e => setBinCount(Number(e.target.value))} className="rounded-md border border-slate-300 bg-white px-2 py-1.5">
+              {[20, 30, 60].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <span>{filteredDataset.samples.length} / {dataset.samples.length} samples · {groupFilter || "All groups"}</span>
+        </div>
         {histogram.total === 0 ? <p className="text-sm text-slate-600">No positive, finite intensities to plot.</p> :
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={hist} barCategoryGap={0} margin={{ top: 8, right: 12, left: 12, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid vertical={false} stroke="#e2e8f0" />
               <XAxis
                 dataKey="midpoint"
                 tickFormatter={(value: number) => value.toFixed(2)}
                 tick={{ fontSize: 10 }}
-                interval="preserveStartEnd"
+                interval={Math.max(0, Math.ceil(hist.length / 8) - 1)}
+                minTickGap={24}
                 label={{
                   value: "log10 MaxLFQ",
                   position: "insideBottom",
@@ -84,11 +112,13 @@ export function IntensityDistribution({
                   </div>;
                 }}
               />
-              <Bar dataKey="count" fill="#0f766e" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="count" fill={groupFilter ? conditionColor(groupFilter, colorMap) : "#0f766e"} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>}
       </div>
+
+      <SampleIntensitySummary boxes={visibleBoxes} domain={paddedDomain(boxes.filter(b => b.n > 0).flatMap(b => [b.min, b.max]))} colorMap={colorMap} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples} />
 
       <div>
         <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -137,13 +167,14 @@ export function IntensityDistribution({
         </div>
       </div>
 
-      <div>
-        <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <details>
+        <summary className="cursor-pointer text-sm font-medium text-teal-800">Show exact per-sample statistics ({visibleBoxes.length} samples)</summary>
+        <header className="mb-2 mt-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-900">
             Per-sample log<sub>10</sub> MaxLFQ quartiles
           </h3>
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            {boxes.length} samples · click to highlight
+            {visibleBoxes.length} samples · click to highlight
           </span>
         </header>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -159,7 +190,7 @@ export function IntensityDistribution({
               </tr>
             </thead>
             <tbody>
-              {boxes.map((b) => (
+              {visibleBoxes.map((b) => (
                 <tr key={b.sample} className={`border-t border-slate-100 ${selectedSamples.includes(b.sample) ? "bg-teal-50" : ""}`} data-selected={selectedSamples.includes(b.sample)}>
                   <td className="px-3 py-2 font-medium text-slate-900">
                     <button type="button" aria-label={`Select sample ${b.sample} in intensity summary`} aria-pressed={selectedSamples.includes(b.sample)} onClick={() => onSelectSamples([b.sample])} className="rounded underline underline-offset-4 focus-visible:outline-teal-700">{b.sample}</button>
@@ -177,20 +208,20 @@ export function IntensityDistribution({
                   </td>
                   <td className="px-3 py-2 tabular-nums">{b.n}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {b.median.toFixed(2)}
+                    {b.n > 0 ? b.median.toFixed(2) : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {b.q1.toFixed(2)} – {b.q3.toFixed(2)}
+                    {b.n > 0 ? `${b.q1.toFixed(2)} – ${b.q3.toFixed(2)}` : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {b.min.toFixed(2)} – {b.max.toFixed(2)}
+                    {b.n > 0 ? `${b.min.toFixed(2)} – ${b.max.toFixed(2)}` : "—"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
     </div>
   );
 }

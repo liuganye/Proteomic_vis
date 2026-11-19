@@ -21,6 +21,8 @@ Seven modules are available: volcano, results, sample abundance, protein details
 - `data/processed/`: existing abundance, differential results, sequence, location, network and structure indexes.
 - `data/external/pdb_files/`: four local PDB examples. `analysis/` and `reports/` contain earlier research material.
 
+[Q2 / Q3 改进说明（HTML，含前后对照、课件页码和检查步骤）](./QC_IMPROVEMENTS.zh-CN.html)
+
 ## Requirements
 
 Python 3.11+ and Node.js 20.9+ with npm. Commands below start from the repository root. The demo reads the data already in this repository and uses localhost; no database is required. First-time dependency installation needs internet access.
