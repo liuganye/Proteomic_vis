@@ -21,6 +21,23 @@ class StructureReference(Model):
     download_url: str | None
 
 
+class StructureModel(Model):
+    """The single model drawn in the structure view, and where it came from."""
+
+    protein_id: str
+    source: Literal["local", "pdb", "alphafold"]
+    model_id: str
+    chain_id: str | None
+    method: str | None
+    resolution: float | None
+    unp_start: int | None
+    unp_end: int | None
+    coverage: float | None
+    source_url: str
+    coloring: Literal["plddt", "position"]
+    coordinates_url: str
+
+
 class ProteinDetail(Protein):
     sequence: str
     locations: list[str]

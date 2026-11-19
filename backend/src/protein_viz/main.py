@@ -12,6 +12,7 @@ from protein_viz.core.errors import ResourceNotFound
 from protein_viz.repositories.csv_repository import CsvRepository
 from protein_viz.schemas.common import ErrorResponse
 from protein_viz.services.qc import QCService
+from protein_viz.services.structures import StructureResolver, StructureUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository = CsvRepository(settings.data_dir)
         app.state.repository = repository
         app.state.qc_service = QCService(repository)
+        app.state.structure_resolver = StructureResolver(
+            settings.structure_cache_dir,
+            repository.local_structures,
+            repository.structure_ids,
+            online=settings.structure_online,
+        )
         logger.info(
             "Loaded %d proteins and %d samples", len(repository.proteins), len(repository.samples)
         )
@@ -31,13 +38,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             app.state.qc_service = None
+            app.state.structure_resolver = None
             app.state.repository = None
 
     app = FastAPI(
         title="Protein Visualization API",
         version=__version__,
         lifespan=lifespan,
-        description="Read-only API over the supplied project dataset. No online statistical jobs.",
+        description=(
+            "Read-only API over the supplied project dataset. No online statistical jobs; "
+            "structures may be downloaded from PDBe/RCSB/AlphaFold and cached."
+        ),
         responses={404: {"model": ErrorResponse}},
     )
     app.add_middleware(
@@ -51,6 +62,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(ResourceNotFound)
     async def resource_not_found(_request: Request, error: ResourceNotFound):
         return JSONResponse(status_code=404, content={"code": error.code, "message": error.message})
+
+    @app.exception_handler(StructureUnavailable)
+    async def structure_unavailable(_request: Request, error: StructureUnavailable):
+        # Unreachable services are temporary (503); everything else means "no model" (404).
+        status = 503 if error.code == "structure_source_unreachable" else 404
+        return JSONResponse(
+            status_code=status, content={"code": error.code, "message": error.message}
+        )
 
     @app.get("/health", tags=["health"])
     def health(request: Request):

@@ -20,6 +20,7 @@ import {
 } from "@/lib/visualization";
 import { RealResultsTable } from "./RealResultsTable";
 import { ProteinAbundance } from "./ProteinAbundance";
+import { ProteinStructure } from "./ProteinStructure";
 import { ProteinPicker } from "./ProteinPicker";
 import { ProteinFocusControls } from "./ProteinFocusControls";
 import type { SampleSelectionProps } from "@/lib/types";
@@ -198,7 +199,7 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
         />
       )}
     </section>),
-    structure: detail ? <Structure detail={detail}/> : evidenceState,
+    structure: detail ? <ProteinStructure key={detail.protein_id} proteinId={detail.protein_id} references={detail.structures}/> : evidenceState,
     go: <section className="flex flex-1 min-h-0 flex-col justify-center gap-3 p-4" aria-labelledby="go-pending-heading">
       <div className="flex items-center gap-2">
         <span className="go-status">Not connected</span>
@@ -1344,39 +1345,4 @@ function NetworkGraph({
       </div>
     )}
   </div>;
-}
-
-function Structure({detail}: {detail: Detail}) {
-  const local = detail.structures.find(s => s.local_available && s.download_url);
-  return <section className="flex flex-1 min-h-0 flex-col">
-    {local ? (
-      <StructureCanvas url={`${API}${local.download_url}`} pdbId={local.pdb_id} references={detail.structures.map(s => s.pdb_id)} key={local.pdb_id}/>
-    ) : (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-xs text-slate-600">
-        <span>{detail.structure_status === "reference_only" ? "PDB reference only (no local coordinates)." : "No PDB reference."}</span>
-        {detail.structures.length > 0 && <span className="font-mono text-slate-500">Refs: {detail.structures.map(s => s.pdb_id).join(", ")}</span>}
-      </div>
-    )}
-  </section>;
-}
-function StructureCanvas({url, pdbId, references}: {url: string; pdbId: string; references: string[]}) {
-  const canvas = useRef<HTMLCanvasElement>(null); const [atoms,setAtoms] = useState<number[][]>([]); const [angle,setAngle] = useState([0.4,0.3]); const [zoom,setZoom] = useState(1); const [err,setErr] = useState(""); const drag = useRef<{x:number;y:number}|null>(null);
-  useEffect(()=>{const c=new AbortController(); fetch(url,{signal:c.signal}).then(r=>{if(!r.ok) throw Error();return r.text();}).then(text=>{const rows=text.split(/\r?\n/).filter(l=>l.startsWith("ATOM  ") && l.slice(12,16).trim()==="CA" && (l[16]===" " || l[16]==="A")); setAtoms(rows.map(l=>[Number(l.slice(30,38)),Number(l.slice(38,46)),Number(l.slice(46,54))]).filter(a=>a.every(Number.isFinite)));}).catch(e=>{if(e.name!=="AbortError") setErr("Could not load local coordinates.");}); return()=>c.abort();},[url]);
-  useEffect(()=>{const ctx=canvas.current?.getContext("2d"); if(!ctx || !atoms.length)return; ctx.clearRect(0,0,600,340); const center=[0,1,2].map(i=>atoms.reduce((s,a)=>s+a[i],0)/atoms.length); const xyz=atoms.map(a=>{const x=a[0]-center[0],y=a[1]-center[1],z=a[2]-center[2]; const x1=x*Math.cos(angle[0])+z*Math.sin(angle[0]), z1=-x*Math.sin(angle[0])+z*Math.cos(angle[0]); return [x1,y*Math.cos(angle[1])-z1*Math.sin(angle[1])];}); const extent=Math.max(...xyz.flatMap(a=>a.map(Math.abs)),1); const scale=145/extent*zoom; ctx.strokeStyle="#0f766e";ctx.lineWidth=1.4;ctx.beginPath();xyz.forEach((p,i)=>{if(i===0 || Math.hypot(...atoms[i].map((v,j)=>v-atoms[i-1][j]))>8)ctx.moveTo(300+p[0]*scale,170+p[1]*scale);else ctx.lineTo(300+p[0]*scale,170+p[1]*scale);});ctx.stroke();},[atoms,angle,zoom]);
-  return <>
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-      <div className="flex items-center gap-2">
-        <span className="rounded bg-teal-50 border border-teal-200 px-2 py-0.5 font-semibold text-teal-900">PDB {pdbId}</span>
-        {references.length > 1 && <span className="text-slate-500">Refs: {references.join(", ")}</span>}
-      </div>
-      <div className="flex gap-1.5">
-        <button type="button" className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50" onClick={()=>setZoom(z=>Math.min(z*1.2,4))}>+</button>
-        <button type="button" className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50" onClick={()=>setZoom(z=>Math.max(z/1.2,0.4))}>−</button>
-        <button type="button" className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50" onClick={()=>{setZoom(1);setAngle([0.4,0.3]);}}>Reset</button>
-      </div>
-    </div>
-    <canvas ref={canvas} width={600} height={340} className="mt-1.5 min-h-[180px] flex-1 w-full touch-none rounded-lg bg-slate-50/45 object-contain" aria-label="Rotatable protein structure C alpha trace" onPointerDown={e=>{drag.current={x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(drag.current){const d=drag.current;setAngle(a=>[a[0]+(e.clientX-d.x)*0.01,a[1]+(e.clientY-d.y)*0.01]);drag.current={x:e.clientX,y:e.clientY};}}} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}/>
-    {err && <p className="mt-1 text-xs text-red-800" role="alert">{err}</p>}
-    {!err && !atoms.length && <p className="mt-1 text-xs text-slate-500">Loading coordinates…</p>}
-  </>;
 }
