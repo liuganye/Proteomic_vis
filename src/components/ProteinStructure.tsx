@@ -71,8 +71,24 @@ export function ProteinStructure({ proteinId, references }: { proteinId: string;
   const [load, setLoad] = useState<Load>({ state: "loading", key });
   const [angle, setAngle] = useState<[number, number]>(DEFAULT_ANGLE);
   const [zoom, setZoom] = useState(1);
+  const [wheelActive, setWheelActive] = useState(false);
   const [mode, setMode] = useState<ColorMode | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  const wheelActiveRef = useRef(false);
+
+  useEffect(() => {
+    wheelActiveRef.current = wheelActive;
+  }, [wheelActive]);
+
+  useEffect(() => {
+    if (!wheelActive) return;
+    const onOutsideDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest("[data-panel-kind='structure']")) setWheelActive(false);
+    };
+    window.addEventListener("pointerdown", onOutsideDown);
+    return () => window.removeEventListener("pointerdown", onOutsideDown);
+  }, [wheelActive]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +113,24 @@ export function ProteinStructure({ proteinId, references }: { proteinId: string;
 
   const current = load.key === key ? load : { state: "loading" as const, key };
   const ready = current.state === "ready" ? current : null;
+  const isReady = ready !== null;
+
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el || !isReady) return;
+    const onWheel = (e: globalThis.WheelEvent) => {
+      const isSolo = Boolean(el.closest("[data-panel-solo='true']"));
+      if (!wheelActiveRef.current && !isSolo && !e.ctrlKey) return;
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0014);
+      setZoom(z => {
+        const next = Math.max(0.4, Math.min(4, z * factor));
+        return Math.abs(next - 1) < 0.03 ? 1 : next;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [isReady]);
   const residues = ready?.residues ?? [];
   const colorMode: ColorMode = mode ?? ready?.model.coloring ?? "position";
   const points = useMemo(() => project(residues, angle, zoom, WIDTH, HEIGHT), [residues, angle, zoom]);
@@ -168,6 +202,7 @@ export function ProteinStructure({ proteinId, references }: { proteinId: string;
     <canvas ref={canvas} width={WIDTH} height={HEIGHT} tabIndex={ready ? 0 : -1}
       className={`mt-3 w-full touch-none rounded-lg bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 ${ready ? "cursor-grab" : "hidden"}`}
       role="application" aria-roledescription="3D structure viewer" aria-label={ready ? `Cα trace of ${describeModel(ready.model, residues.length)}. Drag or use arrow keys to rotate, plus and minus to zoom, 0 to reset.` : "Structure not loaded"}
+      onPointerDownCapture={() => setWheelActive(true)}
       onPointerDown={e => { drag.current = { x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }}
       onPointerMove={e => {
         const d = drag.current;
@@ -198,7 +233,9 @@ export function ProteinStructure({ proteinId, references }: { proteinId: string;
       <div className="mt-2 flex gap-2 text-sm">
         <button type="button" className="rounded border px-3 py-1" onClick={() => setZoom(z => Math.min(z * 1.2, 4))}>Zoom in</button>
         <button type="button" className="rounded border px-3 py-1" onClick={() => setZoom(z => Math.max(z / 1.2, 0.4))}>Zoom out</button>
-        <button type="button" className="rounded border px-3 py-1" onClick={reset}>Reset view</button>
+        <button type="button" className="rounded border px-3 py-1" onClick={reset}>
+          Reset view{Math.abs(zoom - 1) > 0.02 ? ` (${Math.round(zoom * 100)}%)` : ""}
+        </button>
       </div>
     </>}
     {references.length > 0 && <details className="mt-3 text-xs text-slate-600">

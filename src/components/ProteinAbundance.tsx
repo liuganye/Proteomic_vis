@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { abundanceDomain, abundanceGroups, type AbundancePoint } from "@/lib/abundance";
 import type { SampleSelectionProps } from "@/lib/types";
 
@@ -36,10 +36,23 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
 } & SampleSelectionProps) {
   const groups = abundanceGroups(abundance.points);
   const domain = abundanceDomain(abundance.points.map(point => point.log2_intensity));
-  const tickStep = domain && domain.ticks.length > 1 ? domain.ticks[1] - domain.ticks[0] : 1;
-  let tickLabels = domain ? domain.ticks.map(tick => tickLabel(tick, tickStep)) : [];
-  if (domain && new Set(tickLabels).size !== tickLabels.length) {
-    tickLabels = domain.ticks.map(tick => formatIntensity(tick));
+  const [yZoom, setYZoom] = useState<{ baseMin: number; baseMax: number; min: number; max: number } | null>(null);
+  const [wheelActive, setWheelActive] = useState(false);
+  const clipId = useId();
+  const activeYZoom = domain && yZoom && yZoom.baseMin === domain.min && yZoom.baseMax === domain.max ? yZoom : null;
+  const activeDomain = domain
+    ? activeYZoom
+      ? {
+          min: activeYZoom.min,
+          max: activeYZoom.max,
+          ticks: Array.from({ length: 5 }, (_, i) => activeYZoom.min + (i / 4) * (activeYZoom.max - activeYZoom.min)),
+        }
+      : domain
+    : null;
+  const tickStep = activeDomain && activeDomain.ticks.length > 1 ? activeDomain.ticks[1] - activeDomain.ticks[0] : 1;
+  let tickLabels = activeDomain ? activeDomain.ticks.map(tick => tickLabel(tick, tickStep)) : [];
+  if (activeDomain && new Set(tickLabels).size !== tickLabels.length) {
+    tickLabels = activeDomain.ticks.map(tick => formatIntensity(tick));
   }
 
   const hasDomain = domain !== null;
@@ -73,9 +86,73 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
   const right = Math.max(left + 120, abW - Math.round(16 * uiScale));
   const top = Math.round(18 * uiScale);
   const bottom = Math.max(top + 60, abH - Math.round(54 * uiScale));
-  const y = (value: number) => domain
-    ? bottom - ((value - domain.min) / Math.max(domain.max - domain.min, 1e-9)) * (bottom - top)
+  const y = (value: number) => activeDomain
+    ? bottom - ((value - activeDomain.min) / Math.max(activeDomain.max - activeDomain.min, 1e-9)) * (bottom - top)
     : bottom;
+
+  const wheelMetaRef = useRef({
+    wheelActive: false,
+    abH,
+    top,
+    bottom,
+    baseMin: domain?.min ?? 0,
+    baseMax: domain?.max ?? 1,
+    curMin: activeDomain?.min ?? 0,
+    curMax: activeDomain?.max ?? 1,
+  });
+  useEffect(() => {
+    wheelMetaRef.current = {
+      wheelActive,
+      abH,
+      top,
+      bottom,
+      baseMin: domain?.min ?? 0,
+      baseMax: domain?.max ?? 1,
+      curMin: activeDomain?.min ?? 0,
+      curMax: activeDomain?.max ?? 1,
+    };
+  }, [wheelActive, abH, top, bottom, domain, activeDomain]);
+
+  useEffect(() => {
+    if (!wheelActive) return;
+    const onOutsideDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest("[data-panel-kind='abundance']")) setWheelActive(false);
+    };
+    window.addEventListener("pointerdown", onOutsideDown);
+    return () => window.removeEventListener("pointerdown", onOutsideDown);
+  }, [wheelActive]);
+
+  useEffect(() => {
+    const el = chartRef.current;
+    if (!el || !hasDomain) return;
+    const onWheel = (e: globalThis.WheelEvent) => {
+      const meta = wheelMetaRef.current;
+      const isSolo = Boolean(el.closest("[data-panel-solo='true']"));
+      if (!meta.wheelActive && !isSolo && !e.ctrlKey) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      if (!rect.height) return;
+      const my = ((e.clientY - rect.top) / rect.height) * meta.abH;
+      const v = Math.max(0, Math.min(1, (meta.bottom - my) / Math.max(1, meta.bottom - meta.top)));
+      const factor = Math.exp(e.deltaY * 0.0015);
+      setYZoom(curr => {
+        const baseSpan = Math.max(meta.baseMax - meta.baseMin, 1e-6);
+        const curMin = curr && curr.baseMin === meta.baseMin && curr.baseMax === meta.baseMax ? curr.min : meta.baseMin;
+        const curMax = curr && curr.baseMin === meta.baseMin && curr.baseMax === meta.baseMax ? curr.max : meta.baseMax;
+        const nextSpan = Math.max(baseSpan / 8, Math.min(baseSpan, (curMax - curMin) * factor));
+        if (nextSpan >= baseSpan * 0.985) return null;
+        const anchorY = curMin + v * (curMax - curMin);
+        let min = anchorY - v * nextSpan;
+        let max = min + nextSpan;
+        if (min < meta.baseMin) { min = meta.baseMin; max = min + nextSpan; }
+        if (max > meta.baseMax) { max = meta.baseMax; min = Math.max(meta.baseMin, max - nextSpan); }
+        return { baseMin: meta.baseMin, baseMax: meta.baseMax, min, max };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [hasDomain]);
 
   const totalRawWidth = Math.max(1, groups.reduce((sum, group) => sum + group.width, 0));
   const plotW = right - left;
@@ -111,12 +188,20 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
       </div>
       <span className="text-[11px] text-slate-500">log₂ MaxLFQ · median &amp; IQR</span>
     </div>
-    {domain ? (
-      <div ref={chartRef} className="mt-1.5 flex-1 min-h-[170px] w-full overflow-hidden" tabIndex={0} role="region" aria-label="Protein abundance chart">
+    {activeDomain ? (
+      <div
+        ref={chartRef}
+        onPointerDownCapture={() => setWheelActive(true)}
+        className="relative mt-1.5 flex-1 min-h-[170px] w-full overflow-hidden"
+        tabIndex={0}
+        role="region"
+        aria-label="Protein abundance chart"
+      >
         <svg viewBox={`0 0 ${abW} ${abH}`} className="block h-full w-full" preserveAspectRatio="none" role="group" aria-label="Observed abundance by sample group">
-          {domain.ticks.map((t, idx) => (
-            <g key={t}>
-              <line x1={left} x2={right} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeDasharray={idx > 0 && idx < domain.ticks.length - 1 ? "3 3" : undefined} />
+          <defs><clipPath id={clipId}><rect x={left} y={top - 6} width={Math.max(1, right - left)} height={Math.max(1, bottom - top + 12)} /></clipPath></defs>
+          {activeDomain.ticks.map((t, idx) => (
+            <g key={idx}>
+              <line x1={left} x2={right} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeDasharray={idx > 0 && idx < activeDomain.ticks.length - 1 ? "3 3" : undefined} />
               <text x={left - Math.round(6 * uiScale)} y={y(t) + tickFontSize * 0.35} textAnchor="end" fontSize={tickFontSize} fill="#64748b">{tickLabels[idx]}</text>
             </g>
           ))}
@@ -140,44 +225,46 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
             const labelLength = Math.max(5, Math.floor((group.scaledW - 8) / (7 * uiScale)));
 
             return <g key={group.name}>
-              <rect x={group.left + 3} y={top} width={Math.max(10, group.scaledW - 6)} height={bottom - top} rx="4" fill={colFill} opacity={isContrastGroup ? 0.45 : 0.25} />
-              {q1 !== null && q3 !== null && sortedVals.length >= 2 && (
-                <rect x={cxGroup - iqrHalfW} y={y(q3)} width={iqrHalfW * 2} height={Math.max(2, y(q1) - y(q3))} rx="2" fill={dotColor} fillOpacity="0.14" stroke={dotColor} strokeOpacity="0.4" strokeWidth="1" />
-              )}
-              {med !== null && (
-                <line x1={cxGroup - medHalfW} x2={cxGroup + medHalfW} y1={y(med)} y2={y(med)} stroke="#0f172a" strokeWidth={2.2 * uiScale} />
-              )}
-              {observed.map(p => {
-                const selected = selectedSamples.includes(p.sample_id);
-                const px = group.left + (p.x / group.width) * group.scaledW;
-                const py = y(p.log2_intensity);
-                return <g key={p.sample_id}>
-                  <circle
-                    data-sample={p.sample_id}
-                    cx={px}
-                    cy={py}
-                    r={(selected ? 6.5 : 4.5) * uiScale}
-                    fill={selected ? "#c2410c" : dotColor}
-                    opacity={selected ? 1 : 0.88}
-                    stroke={selected ? "#0f172a" : "#ffffff"}
-                    strokeWidth={(selected ? 2 : 0.9) * uiScale}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Select sample ${p.sample_id}, ${group.name}, log₂ intensity ${formatIntensity(p.log2_intensity)}`}
-                    aria-pressed={selected}
-                    onClick={() => onSelectSamples([p.sample_id])}
-                    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSamples([p.sample_id]); } }}
-                    className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900"
-                  >
-                    <title>{`${p.sample_id}: ${formatIntensity(p.log2_intensity)}`}</title>
-                  </circle>
-                  {selected && (
-                    <text x={px} y={Math.max(top + 10 * uiScale, py - 9 * uiScale)} textAnchor="middle" fontSize={badgeFontSize} fontWeight="700" fill="#9a3412" paintOrder="stroke" stroke="#ffffff" strokeWidth="3" pointerEvents="none">
-                      {p.sample_id}: {formatIntensity(p.log2_intensity)}
-                    </text>
-                  )}
-                </g>;
-              })}
+              <g clipPath={`url(#${clipId})`}>
+                <rect x={group.left + 3} y={top} width={Math.max(10, group.scaledW - 6)} height={bottom - top} rx="4" fill={colFill} opacity={isContrastGroup ? 0.45 : 0.25} />
+                {q1 !== null && q3 !== null && sortedVals.length >= 2 && (
+                  <rect x={cxGroup - iqrHalfW} y={y(q3)} width={iqrHalfW * 2} height={Math.max(2, y(q1) - y(q3))} rx="2" fill={dotColor} fillOpacity="0.14" stroke={dotColor} strokeOpacity="0.4" strokeWidth="1" />
+                )}
+                {med !== null && (
+                  <line x1={cxGroup - medHalfW} x2={cxGroup + medHalfW} y1={y(med)} y2={y(med)} stroke="#0f172a" strokeWidth={2.2 * uiScale} />
+                )}
+                {observed.map(p => {
+                  const selected = selectedSamples.includes(p.sample_id);
+                  const px = group.left + (p.x / group.width) * group.scaledW;
+                  const py = y(p.log2_intensity);
+                  return <g key={p.sample_id}>
+                    <circle
+                      data-sample={p.sample_id}
+                      cx={px}
+                      cy={py}
+                      r={(selected ? 6.5 : 4.5) * uiScale}
+                      fill={selected ? "#c2410c" : dotColor}
+                      opacity={selected ? 1 : 0.88}
+                      stroke={selected ? "#0f172a" : "#ffffff"}
+                      strokeWidth={(selected ? 2 : 0.9) * uiScale}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Select sample ${p.sample_id}, ${group.name}, log₂ intensity ${formatIntensity(p.log2_intensity)}`}
+                      aria-pressed={selected}
+                      onClick={() => onSelectSamples([p.sample_id])}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSamples([p.sample_id]); } }}
+                      className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900"
+                    >
+                      <title>{`${p.sample_id}: ${formatIntensity(p.log2_intensity)}`}</title>
+                    </circle>
+                    {selected && (
+                      <text x={px} y={Math.max(top + 10 * uiScale, py - 9 * uiScale)} textAnchor="middle" fontSize={badgeFontSize} fontWeight="700" fill="#9a3412" paintOrder="stroke" stroke="#ffffff" strokeWidth="3" pointerEvents="none">
+                        {p.sample_id}: {formatIntensity(p.log2_intensity)}
+                      </text>
+                    )}
+                  </g>;
+                })}
+              </g>
               <text x={cxGroup} y={groupLabelY} textAnchor="middle" fontSize={groupLabelSize} fontWeight={isContrastGroup ? "700" : "500"} fill={group.name === "Human" ? "#0f766e" : group.name === "QC" ? "#92400e" : "#475569"}>
                 <title>{group.name}</title>
                 {group.name.length > labelLength ? `${group.name.slice(0, labelLength - 1)}…` : group.name}
@@ -191,6 +278,16 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
             </g>;
           })}
         </svg>
+        {activeYZoom && domain && (
+          <button
+            type="button"
+            onClick={() => setYZoom(null)}
+            className="absolute bottom-2 left-2 z-20 rounded border border-slate-300/90 bg-white/90 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-700 shadow-sm backdrop-blur-sm hover:bg-teal-50 hover:text-teal-900"
+            title="Reset Y-axis zoom"
+          >
+            {Math.round(((domain.max - domain.min) / Math.max(1e-6, activeYZoom.max - activeYZoom.min)) * 100)}% · Reset
+          </button>
+        )}
       </div>
     ) : (
       <p className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700" role="status">

@@ -112,6 +112,8 @@ export function RealVolcanoPlot({
   const [showLabels, setShowLabels] = useState(true);
   const [showNeighbors, setShowNeighbors] = useState(true);
   const [zoomedToBrush, setZoomedToBrush] = useState(false);
+  const [wheelView, setWheelView] = useState<{ xMin: number; xMax: number; yMin: number; yMax: number } | null>(null);
+  const [wheelActive, setWheelActive] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredThreshold, setHoveredThreshold] = useState<"p" | "fc-left" | "fc-right" | null>(null);
   const [thresholdDrag, setThresholdDrag] = useState<"p" | "fc-left" | "fc-right" | null>(null);
@@ -125,11 +127,11 @@ export function RealVolcanoPlot({
   } | null>(null);
   const pointerDownAt = useRef<{ x: number; y: number } | null>(null);
   const clipId = useId();
-  const isZoomed = Boolean(zoomedToBrush && brush);
+  const isZoomed = Boolean((zoomedToBrush && brush) || wheelView);
   const activeHoverId = hoveredProteinId ?? hoveredId;
 
   const view = useMemo(() => {
-    if (isZoomed && brush) {
+    if (zoomedToBrush && brush) {
       const fcSpan = Math.max(brush.maxFc - brush.minFc, 0.2);
       const ySpan = Math.max(brush.maxY - brush.minY, 0.2);
       const xMin = brush.minFc - fcSpan * 0.05;
@@ -145,6 +147,13 @@ export function RealVolcanoPlot({
         yTicks: rangeTicks(yMin, yMax, 5),
       };
     }
+    if (wheelView) {
+      return {
+        ...wheelView,
+        xTicks: rangeTicks(wheelView.xMin, wheelView.xMax, 5),
+        yTicks: rangeTicks(wheelView.yMin, wheelView.yMax, 5),
+      };
+    }
     return {
       xMin: -fullXMax,
       xMax: fullXMax,
@@ -153,7 +162,93 @@ export function RealVolcanoPlot({
       xTicks: fullXTicks,
       yTicks: fullYTicks,
     };
-  }, [isZoomed, brush, fullXMax, fullYMax, fullXTicks, fullYTicks]);
+  }, [zoomedToBrush, brush, wheelView, fullXMax, fullYMax, fullXTicks, fullYTicks]);
+
+  const wheelMetaRef = useRef({
+    wheelActive: false,
+    left,
+    right,
+    top,
+    bottom,
+    svgW,
+    svgH,
+    fullXMax,
+    fullYMax,
+    viewXMin: view.xMin,
+    viewXMax: view.xMax,
+    viewYMin: view.yMin,
+    viewYMax: view.yMax,
+  });
+  useEffect(() => {
+    wheelMetaRef.current = {
+      wheelActive,
+      left,
+      right,
+      top,
+      bottom,
+      svgW,
+      svgH,
+      fullXMax,
+      fullYMax,
+      viewXMin: view.xMin,
+      viewXMax: view.xMax,
+      viewYMin: view.yMin,
+      viewYMax: view.yMax,
+    };
+  }, [wheelActive, left, right, top, bottom, svgW, svgH, fullXMax, fullYMax, view]);
+
+  useEffect(() => {
+    if (!wheelActive) return;
+    const onOutsideDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest("[data-panel-kind='volcano']")) setWheelActive(false);
+    };
+    window.addEventListener("pointerdown", onOutsideDown);
+    return () => window.removeEventListener("pointerdown", onOutsideDown);
+  }, [wheelActive]);
+
+  useEffect(() => {
+    const el = plotContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: globalThis.WheelEvent) => {
+      const meta = wheelMetaRef.current;
+      const isSolo = Boolean(el.closest("[data-panel-solo='true']"));
+      if (!meta.wheelActive && !isSolo && !e.ctrlKey) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const mx = ((e.clientX - rect.left) / rect.width) * meta.svgW;
+      const my = ((e.clientY - rect.top) / rect.height) * meta.svgH;
+      const u = Math.max(0, Math.min(1, (mx - meta.left) / Math.max(1, meta.right - meta.left)));
+      const v = Math.max(0, Math.min(1, (meta.bottom - my) / Math.max(1, meta.bottom - meta.top)));
+      const factor = Math.exp(e.deltaY * 0.0015);
+      setZoomedToBrush(false);
+      setWheelView(curr => {
+        const curXMin = curr?.xMin ?? meta.viewXMin;
+        const curXMax = curr?.xMax ?? meta.viewXMax;
+        const curYMin = curr?.yMin ?? meta.viewYMin;
+        const curYMax = curr?.yMax ?? meta.viewYMax;
+        const fullSpanX = Math.max(0.2, meta.fullXMax * 2);
+        const fullSpanY = Math.max(0.2, meta.fullYMax);
+        const nextSpanX = Math.max(fullSpanX / 20, Math.min(fullSpanX, (curXMax - curXMin) * factor));
+        const nextSpanY = Math.max(fullSpanY / 20, Math.min(fullSpanY, (curYMax - curYMin) * factor));
+        if (nextSpanX >= fullSpanX * 0.985 && nextSpanY >= fullSpanY * 0.985) return null;
+        const anchorX = curXMin + u * (curXMax - curXMin);
+        const anchorY = curYMin + v * (curYMax - curYMin);
+        let xMin = anchorX - u * nextSpanX;
+        let xMax = xMin + nextSpanX;
+        if (xMin < -meta.fullXMax) { xMin = -meta.fullXMax; xMax = xMin + nextSpanX; }
+        if (xMax > meta.fullXMax) { xMax = meta.fullXMax; xMin = xMax - nextSpanX; }
+        let yMin = anchorY - v * nextSpanY;
+        let yMax = yMin + nextSpanY;
+        if (yMin < 0) { yMin = 0; yMax = nextSpanY; }
+        if (yMax > meta.fullYMax) { yMax = meta.fullYMax; yMin = Math.max(0, yMax - nextSpanY); }
+        return { xMin, xMax, yMin, yMax };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const pointerPosition = (event: PointerEvent<SVGSVGElement>) => {
     const svg = event.currentTarget;
@@ -357,7 +452,14 @@ export function RealVolcanoPlot({
         </button>
       </div>
     </div>
-    <div ref={plotContainerRef} className="relative flex-1 min-h-[210px] w-full overflow-visible" tabIndex={0} role="region" aria-label="Human minus QC volcano chart.">
+    <div
+      ref={plotContainerRef}
+      onPointerDownCapture={() => setWheelActive(true)}
+      className="relative flex-1 min-h-[210px] w-full overflow-visible"
+      tabIndex={0}
+      role="region"
+      aria-label="Human minus QC volcano chart."
+    >
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
         data-no-panel-drag={boxSelect || hoveredId || hoveredThreshold || thresholdDrag ? "true" : undefined}
@@ -777,6 +879,16 @@ export function RealVolcanoPlot({
         <text x={(left + right) / 2} y={svgH - Math.round(8 * uiScale)} textAnchor="middle" fontSize={axisTitleSize} fill="#334155">log₂ fold change (Human − QC)</text>
         <text transform={`translate(${Math.round(15 * uiScale)} ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" fontSize={axisTitleSize} fill="#334155">−log₁₀ adjusted p</text>
       </svg>
+      {wheelView && (
+        <button
+          type="button"
+          onClick={() => setWheelView(null)}
+          className="absolute bottom-2 left-2 z-20 rounded border border-slate-300/90 bg-white/90 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-700 shadow-sm backdrop-blur-sm hover:bg-teal-50 hover:text-teal-900"
+          title="Reset volcano zoom"
+        >
+          {Math.round(((fullXMax * 2) / Math.max(0.05, wheelView.xMax - wheelView.xMin)) * 100)}% · Reset
+        </button>
+      )}
       {clusterMenu && (
         <div
           className="absolute z-50 w-56 rounded-lg border border-teal-700/40 bg-white/95 p-1.5 text-xs shadow-xl backdrop-blur-sm"
