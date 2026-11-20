@@ -23,6 +23,11 @@ coverage/
 # Re-generated analysis results; committed snapshots live elsewhere
 /reports/generated/
 
+# Smoke downloads + local Automation 2 run dirs (large PRIDE tables)
+/data/smoke/
+/runs/
+
+
 # Local files
 .DS_Store
 Thumbs.db

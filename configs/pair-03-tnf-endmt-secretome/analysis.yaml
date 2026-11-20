@@ -1,0 +1,87 @@
+meta:
+  run_id: pair-03-tnf-endmt-secretome
+  project: close-loop AI for proteomic data analysis
+  out_dir: runs/pair-03-tnf-endmt-secretome
+  graceful_skip_missing: true
+
+dataset:
+  name: PXD014488-tnf-endmt-secretome
+  plugin: generic_maxlfq
+  intensity_mode: lfq
+  matrix_path: data/smoke/pair-03-tnf-endmt-secretome/txt/proteinGroups.txt
+  protein_col: Majority protein IDs
+  format: tsv
+
+samples:
+  # Smoke focus: 48 h control vs TNF-α
+  column_groups:
+    C48_a: control
+    C48_b: control
+    C48_c: control
+    tnf48h_a: treatment
+    tnf48h_b: treatment
+    tnf48h_c: treatment
+  control_label: control
+  treatment_label: treatment
+  min_n_per_arm: 2
+
+filters:
+  contam_filter: maxquant_or_fragpipe
+  zeros_as_nan: true
+
+missingness:
+  nan_freq_scope: contrast_columns
+  allow_partial: true
+
+imputation:
+  methods: [perseus_left_censored]
+  perseus:
+    shift: 1.8
+    width: 0.3
+  seed: 42
+
+normalization:
+  median_center: true
+
+abundance:
+  scope: contrast_columns
+  log: log10_mean
+
+se:
+  enabled: true
+  formula: welch_se_delta
+  contrast: control_minus_treatment
+  qc_arm: omit
+  tertiles: 3
+
+differential:
+  enabled: true
+  test: limma_like_moderated_ttest
+  fdr: bh
+  alpha: 0.05
+  exploratory:
+    alpha: 0.1
+    abs_log2_fc_cutoff: 0.585
+
+annotation:
+  gene_column: Gene names
+  fasta_header_column: Fasta headers
+
+diagnostics:
+  # Paper reports ~3× secreted protein load at 48 h by iBAQ; keep DE on LFQ
+  group_load: true
+  group_load_intensity_mode: ibaq
+  # Iter3 Agent5: explicit fraction-changed at 1.5-fold (paper 'most differ' claim)
+  fraction_changed: true
+  fraction_changed_fold_cutoff: 1.5
+  fraction_changed_alpha: 0.05
+
+tech_bio:
+  enabled: false
+
+mistaken_id:
+  enabled: false
+
+logging:
+  format: jsonl
+  dir: runs/pair-03-tnf-endmt-secretome/logs

@@ -1,0 +1,86 @@
+meta:
+  run_id: pair-01-maxlfq-hela-ecoli
+  project: close-loop AI for proteomic data analysis
+  out_dir: runs/pair-01-maxlfq-hela-ecoli
+  graceful_skip_missing: true
+
+dataset:
+  name: PXD000279-proteomebenchmark
+  plugin: generic_maxlfq
+  intensity_mode: lfq
+  matrix_path: data/smoke/pair-01-maxlfq-hela-ecoli/proteinGroups.txt
+  protein_col: Majority protein IDs
+  format: tsv
+
+samples:
+  # L* = HeLa + low E. coli (control); H* = HeLa + high E. coli (treatment)
+  column_groups:
+    L1: control
+    L2: control
+    L3: control
+    H1: treatment
+    H2: treatment
+    H3: treatment
+  control_label: control
+  treatment_label: treatment
+  min_n_per_arm: 2
+
+filters:
+  contam_filter: maxquant_or_fragpipe
+  zeros_as_nan: true
+
+missingness:
+  nan_freq_scope: contrast_columns
+  allow_partial: true
+
+imputation:
+  methods: [perseus_left_censored]
+  perseus:
+    shift: 1.8
+    width: 0.3
+  seed: 42
+
+normalization:
+  # Reduce sample-level offset / fold compression vs expected 1:1 / 3:1
+  median_center: true
+
+abundance:
+  scope: contrast_columns
+  log: log10_mean
+
+se:
+  enabled: true
+  formula: welch_se_delta
+  contrast: control_minus_treatment
+  qc_arm: omit
+  tertiles: 3
+
+differential:
+  enabled: true
+  test: limma_like_moderated_ttest
+  fdr: bh
+  alpha: 0.05
+  exploratory:
+    alpha: 0.1
+    abs_log2_fc_cutoff: 0.5
+
+annotation:
+  gene_column: Gene names
+  fasta_header_column: Fasta headers
+
+diagnostics:
+  species_ratios: true
+  # Iter1 Agent5: abundance × organism precision view for MaxLFQ ratio claim
+  species_ratio_abundance_tertiles: true
+
+tech_bio:
+  enabled: true
+  tech_rule: se_low_fallback
+  non_se_proxy: none
+
+mistaken_id:
+  enabled: false
+
+logging:
+  format: jsonl
+  dir: runs/pair-01-maxlfq-hela-ecoli/logs
