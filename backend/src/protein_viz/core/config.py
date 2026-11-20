@@ -6,6 +6,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[4]
 DEFAULT_DATA_DIR = PROJECT_DIR / "data"
+DEFAULT_STRUCTURE_CACHE_DIR = PROJECT_DIR / ".cache" / "structures"
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:43147", "http://127.0.0.1:43147")
 
 
@@ -13,11 +14,16 @@ DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173", "http:
 class Settings:
     data_dir: Path
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
+    structure_cache_dir: Path = DEFAULT_STRUCTURE_CACHE_DIR
+    # Download structures from PDBe/RCSB/AlphaFold when no bundled file exists.
+    structure_online: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
         configured_dir = os.getenv("PROTEIN_DATA_DIR")
         origins = os.getenv("PROTEIN_CORS_ORIGINS")
+        cache_dir = os.getenv("PROTEIN_STRUCTURE_CACHE_DIR")
+        online = os.getenv("PROTEIN_STRUCTURE_ONLINE", "1").strip().lower()
         return cls(
             data_dir=Path(configured_dir).expanduser().resolve()
             if configured_dir
@@ -25,4 +31,8 @@ class Settings:
             cors_origins=tuple(value.strip() for value in origins.split(",") if value.strip())
             if origins is not None
             else DEFAULT_CORS_ORIGINS,
+            structure_cache_dir=Path(cache_dir).expanduser().resolve()
+            if cache_dir
+            else DEFAULT_STRUCTURE_CACHE_DIR,
+            structure_online=online not in ("0", "false", "no", "off"),
         )

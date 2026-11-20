@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -43,6 +45,37 @@ def test_local_reference_only_and_no_reference_are_distinct(client):
     assert client.get("/api/v1/structures/1abc").text.startswith("HEADER")
     assert client.get("/api/v1/structures/2DEF").status_code == 404
 
+
+
+def test_structure_endpoint_reports_source_and_serves_one_chain(client):
+    from protein_viz.services.structures import RCSB_PDB_URL, SIFTS_URL
+
+    entry = {"pdb_id": "2def", "chain_id": "A", "coverage": 0.9, "resolution": 1.5,
+             "experimental_method": "X-ray diffraction", "unp_start": 1, "unp_end": 4}
+    coordinates = (
+        "ATOM      1  CA  ALA A   1       1.000   0.000   0.000  1.00 20.00           C\n"
+        "ATOM      2  CA  ALA B   1       9.000   0.000   0.000  1.00 20.00           C\nEND\n"
+    )
+    pages = {
+        SIFTS_URL.format(accession="P2"): json.dumps({"P2": [entry]}).encode(),
+        RCSB_PDB_URL.format(pdb_id="2DEF"): coordinates.encode(),
+    }
+    resolver = client.app.state.structure_resolver
+    # Offline by default: an explicit, structured 404 rather than a hang.
+    offline = client.get("/api/v1/proteins/P2/structure")
+    assert offline.status_code == 404 and offline.json()["code"] == "structure_offline"
+    resolver.online, resolver.fetch = True, pages.get
+    model = client.get("/api/v1/proteins/P2/structure").json()
+    assert (model["source"], model["model_id"], model["chain_id"]) == ("pdb", "2DEF", "A")
+    text = client.get(model["coordinates_url"]).text
+    assert " A   1 " in text and " B   1 " not in text
+    assert client.get("/api/v1/proteins/NOPE/structure").status_code == 404
+
+    def unreachable(url):
+        raise OSError(f"Could not reach {url}")
+
+    resolver.fetch = unreachable
+    assert client.get("/api/v1/proteins/P3/structure").status_code == 503
 
 def test_adjusted_and_raw_significance_keep_the_original_test_background(client):
     url = "/api/v1/contrasts/human-vs-qc/results"

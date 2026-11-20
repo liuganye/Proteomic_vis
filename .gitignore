@@ -10,6 +10,7 @@ __pycache__/
 # JavaScript dependencies and build outputs
 node_modules/
 .next/
+next-env.d.ts
 coverage/
 *.tsbuildinfo
 
@@ -26,3 +27,6 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+
+# Downloaded structure models (PDB/AlphaFold) cached by the backend
+/.cache/

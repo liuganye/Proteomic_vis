@@ -21,6 +21,8 @@ Seven modules are available: volcano, results, sample abundance, protein details
 - `data/processed/`: existing abundance, differential results, sequence, location, network and structure indexes.
 - `data/external/pdb_files/`: four local PDB examples. `analysis/` and `reports/` contain earlier research material.
 
+[Q2 / Q3 改进说明（HTML，含前后对照、课件页码和检查步骤）](./QC_IMPROVEMENTS.zh-CN.html)
+
 ## Requirements
 
 Python 3.11+ and Node.js 20.9+ with npm. Commands below start from the repository root. The demo reads the data already in this repository and uses localhost; no database is required. First-time dependency installation needs internet access.
@@ -83,6 +85,8 @@ From `backend/`, use the venv Python to run `python -m protein_viz.cli validate-
 The data check should report 9,369 proteins, 45 samples, 4,375 differential results, and four locally available structures. At adjusted p < 0.05 and |log2FC| > 0.7, the imported Human − QC result has 33 significant proteins. These are checks of the included snapshot, not a reanalysis.
 
 The backend defaults to the repository's `data/` directory. To use another dataset set `PROTEIN_DATA_DIR` to a data root with `raw/`, `processed/`, and `external/pdb_files/`, or to a flat directory containing the required files and `pdb_files/`. CORS defaults include localhost ports 43147 and 5173; override with comma-separated `PROTEIN_CORS_ORIGINS` if needed. The frontend API origin defaults to `http://127.0.0.1:8000`; set `NEXT_PUBLIC_PROTEIN_API` before building or starting the frontend if different.
+
+Protein structures (D4): when a protein has no bundled file, the backend looks up the best experimental chain with PDBe SIFTS, downloads it from RCSB, and otherwise uses the AlphaFold DB prediction. It keeps only the selected chain of the first model and caches it in `.cache/structures/` (ignored by git), so each protein is downloaded once. This needs internet access (through your proxy if you use one); set `PROTEIN_STRUCTURE_ONLINE=0` to stay offline, which then shows only the four bundled structures, and `PROTEIN_STRUCTURE_CACHE_DIR` to cache elsewhere.
 
 ## Scope and limitations
 
