@@ -21,8 +21,33 @@ export function SampleCorrelation({
   const groups = useMemo(() => [...new Set(conditions)], [conditions]);
   const colorMap = colorMapProp ?? buildConditionColorMap(groups);
   const [showValues, setShowValues] = useState(false);
+  const [scaleMode, setScaleMode] = useState<"auto" | "full">("auto");
   const [activeCell, setActiveCell] = useState(0);
   const [inspectedCell, setInspectedCell] = useState<{ i: number; j: number } | null>(null);
+  const observedRange = useMemo(() => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < matrix.length; i++) {
+      for (let j = 0; j < matrix[i].length; j++) {
+        const v = matrix[i][j];
+        if (Number.isFinite(v)) {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max - min < 1e-6) {
+      return { min: -1, max: 1 };
+    }
+    return { min, max };
+  }, [matrix]);
+  const colorValue = (r: number) => {
+    if (!Number.isFinite(r)) return r;
+    if (scaleMode === "full") return r;
+    const span = observedRange.max - observedRange.min;
+    if (span < 1e-6) return r;
+    return -1 + ((r - observedRange.min) / span) * 2;
+  };
   const inspected = useMemo(() => {
     if (!inspectedCell) return null;
     const { i, j } = inspectedCell;
@@ -51,13 +76,44 @@ export function SampleCorrelation({
         {groups.map(group => <li key={group} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: conditionColor(group, colorMap) }} />{group}</li>)}
       </ul>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-700">
-        <div className="w-64 max-w-full" aria-label="Pearson r color scale: orange at minus one, neutral at zero, blue at plus one">
-          <p className="mb-1 font-medium">Pearson r · full range</p>
-          <div className="h-3 rounded-sm border border-slate-300" style={{ background: "linear-gradient(to right, rgb(179, 88, 6), rgb(247, 247, 247), rgb(33, 102, 172))" }} />
-          <div className="mt-1 flex justify-between"><span>−1</span><span>0</span><span>+1</span></div>
+        <div className="w-64 max-w-full" aria-label="Pearson r color scale: blue for lowest correlation, ivory at midpoint, red for highest correlation">
+          <p className="mb-1 font-medium">
+            Pearson r · {scaleMode === "full" ? "full range (−1 to +1)" : `observed (${observedRange.min.toFixed(2)} to ${observedRange.max.toFixed(2)})`}
+          </p>
+          <div
+            className="h-3 rounded-sm border border-slate-300"
+            style={{
+              background: "linear-gradient(to right, #4a72a0 0%, #8faece 25%, #f6f7f8 50%, #e8ae9e 75%, #c45c56 100%)",
+            }}
+          />
+          <div className="mt-1 flex justify-between tabular-nums">
+            <span>{scaleMode === "full" ? "−1" : observedRange.min.toFixed(2)}</span>
+            <span>{scaleMode === "full" ? "0" : ((observedRange.min + observedRange.max) / 2).toFixed(2)}</span>
+            <span>{scaleMode === "full" ? "+1" : observedRange.max.toFixed(2)}</span>
+          </div>
         </div>
-        <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center bg-slate-200 text-slate-700">—</span> NA / undefined</span>
-        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={showValues} onChange={e => setShowValues(e.target.checked)} /> Show cell values</label>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex overflow-hidden rounded border border-slate-300" role="group" aria-label="Heatmap color scale">
+            <button
+              type="button"
+              aria-pressed={scaleMode === "auto"}
+              onClick={() => setScaleMode("auto")}
+              className={`px-2 py-0.5 ${scaleMode === "auto" ? "bg-teal-800 font-medium text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+            >
+              Auto range
+            </button>
+            <button
+              type="button"
+              aria-pressed={scaleMode === "full"}
+              onClick={() => setScaleMode("full")}
+              className={`border-l border-slate-300 px-2 py-0.5 ${scaleMode === "full" ? "bg-teal-800 font-medium text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+            >
+              Full (−1..1)
+            </button>
+          </div>
+          <span className="flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center bg-slate-200 text-slate-700">—</span> NA</span>
+          <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={showValues} onChange={e => setShowValues(e.target.checked)} /> Show cell values</label>
+        </div>
       </div>
       <div className="mb-3 min-h-[4.5rem] rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600" role="status" aria-live="polite" data-testid="correlation-inspector">
         {inspected ? <>
@@ -102,7 +158,7 @@ export function SampleCorrelation({
                     <td key={col} className="p-px" style={{ borderTop: i > 0 && conditions[i] !== conditions[i - 1] ? "3px solid white" : undefined, borderLeft: j > 0 && conditions[j] !== conditions[j - 1] ? "3px solid white" : undefined }}>
                       <button type="button"
                         className={`flex items-center justify-center text-[10px] font-medium tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900 ${showValues ? "h-9 w-9" : "h-4 w-4"}`}
-                        style={{ background: correlationColor(r), color: correlationTextColor(r), boxShadow: inspectedCell?.i === i && inspectedCell?.j === j ? "inset 0 0 0 2px #0f172a" : marked ? `inset 0 0 0 ${pairSelected ? 2 : 1}px #0f172a` : undefined }}
+                        style={{ background: correlationColor(colorValue(r)), color: correlationTextColor(colorValue(r)), boxShadow: inspectedCell?.i === i && inspectedCell?.j === j ? "inset 0 0 0 2px #0f172a" : marked ? `inset 0 0 0 ${pairSelected ? 2 : 1}px #0f172a` : undefined }}
                         title={`${row} × ${col}: ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
                         aria-label={`Select samples ${row} and ${col}; r ${Number.isFinite(r) ? r.toFixed(3) : "NA"}`}
                         aria-pressed={pairSelected}

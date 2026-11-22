@@ -1,9 +1,28 @@
-/** Orange / neutral / blue, with the full Pearson range preserved. */
+const CORRELATION_STOPS: [number, [number, number, number]][] = [
+  [-1, [74, 114, 160]],    // #4a72a0 muted slate blue
+  [-0.5, [143, 174, 206]], // #8faece soft mist blue
+  [0, [246, 247, 248]],    // #f6f7f8 soft neutral
+  [0.5, [232, 174, 158]],  // #e8ae9e muted peach-rose
+  [1, [196, 92, 86]],      // #c45c56 muted terracotta red
+];
+
+/** Soft muted diverging ramp (vlag-inspired): slate blue (-1) -> soft neutral (0) -> terracotta red (+1). */
 function correlationRgb(value: number): number[] {
   if (!Number.isFinite(value)) return [226, 232, 240];
   const r = Math.max(-1, Math.min(1, value));
-  const end = r < 0 ? [179, 88, 6] : [33, 102, 172];
-  return end.map((channel) => Math.round(247 + (channel - 247) * Math.abs(r)));
+  for (let i = 0; i < CORRELATION_STOPS.length - 1; i++) {
+    const [a, colA] = CORRELATION_STOPS[i];
+    const [b, colB] = CORRELATION_STOPS[i + 1];
+    if (r >= a && r <= b) {
+      const t = (r - a) / (b - a);
+      return [
+        Math.round(colA[0] + (colB[0] - colA[0]) * t),
+        Math.round(colA[1] + (colB[1] - colA[1]) * t),
+        Math.round(colA[2] + (colB[2] - colA[2]) * t),
+      ];
+    }
+  }
+  return CORRELATION_STOPS[CORRELATION_STOPS.length - 1][1];
 }
 
 export function correlationColor(value: number): string {

@@ -125,9 +125,9 @@ test("real HYE histogram accounts for every observed value without the old 20k c
 });
 
 test("correlation colors distinguish negative, zero and weak positive values", () => {
-  assert.equal(vis.correlationColor(-1), "rgb(179, 88, 6)");
-  assert.equal(vis.correlationColor(0), "rgb(247, 247, 247)");
-  assert.equal(vis.correlationColor(1), "rgb(33, 102, 172)");
+  assert.equal(vis.correlationColor(-1), "rgb(74, 114, 160)");
+  assert.equal(vis.correlationColor(0), "rgb(246, 247, 248)");
+  assert.equal(vis.correlationColor(1), "rgb(196, 92, 86)");
   assert.equal(new Set([-0.35, 0, 0.2, 0.5, 1, NaN].map(vis.correlationColor)).size, 6);
 });
 
