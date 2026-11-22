@@ -22,7 +22,7 @@ When a secret is configured, **`Origin` / `Sec-Fetch-Site` alone never authorize
 1. **API secret** — header `x-custom-plot-secret: <secret>` (AI / automation).
 2. **Browser session** — `GET /api/custom-plot/session` sets an HttpOnly `custom_plot_sess` cookie and returns a short-lived CSRF token; the in-app UI then POSTs with `credentials: "same-origin"` and header `x-custom-plot-csrf`. The secret never ships in client JS.
 
-`CUSTOM_PLOT_REQUIRE_SECRET=1` disables session minting and requires the API secret header for every caller (including the UI).
+**Session mint is not a network ACL.** Anyone who can reach `GET /api/custom-plot/session` can obtain a cookie+CSRF pair and then POST scripts. That is intentional: the session path replaces the old spoofable Origin bypass and blocks cross-site CSRF, but it does **not** authenticate remote clients. Treat network isolation (localhost / private VPC) as the real boundary for single-user deployments. If the host must deny all callers except secret holders, set `CUSTOM_PLOT_REQUIRE_SECRET=1` (disables session minting; UI cannot call without the secret header).
 
 Do not publish the app network-reachable with `CUSTOM_PLOT_ALLOW_UNAUTHENTICATED=1` unless you accept arbitrary script execution on that host.
 

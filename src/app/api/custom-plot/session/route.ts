@@ -16,6 +16,12 @@ function envFlag(name: string): boolean {
  * GET /api/custom-plot/session
  * Mint a short-lived HttpOnly session cookie + CSRF token for the in-app UI.
  * Does not accept Origin / Sec-Fetch-Site as credentials.
+ *
+ * Intentional exposure: minting itself is unauthenticated when a secret is
+ * configured. Reachable clients can obtain a session. This blocks Origin
+ * spoofing + CSRF; it is not a substitute for network isolation. Use
+ * CUSTOM_PLOT_REQUIRE_SECRET=1 to disable minting and require the secret
+ * header for every caller.
  */
 export async function GET(request: Request) {
   const secret = process.env.CUSTOM_PLOT_API_SECRET?.trim() || "";

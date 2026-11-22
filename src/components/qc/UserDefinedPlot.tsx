@@ -137,6 +137,7 @@ export function UserDefinedPlot({
         if (!body.ok) {
           // Clear stale chart so a failed re-run cannot show the prior scope.
           setLiveChart(undefined);
+          onUpdate?.(spec.id, { chartSpec: undefined });
           setScriptError(body.error || `Run failed (HTTP ${res.status})`);
           setScriptStatus("error");
           return;
@@ -148,6 +149,7 @@ export function UserDefinedPlot({
         if (cancelled) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
         setLiveChart(undefined);
+        onUpdate?.(spec.id, { chartSpec: undefined });
         setScriptError(err instanceof Error ? err.message : String(err));
         setScriptStatus("error");
       }

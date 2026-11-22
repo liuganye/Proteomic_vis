@@ -205,6 +205,39 @@ test("forged Origin + Sec-Fetch-Site alone are rejected in production posture", 
   );
 });
 
+test("session mint without prior auth grants execution (intentional; not a network ACL)", () => {
+  // Documents deploy posture: anyone who can reach the mint endpoint can get
+  // cookie+CSRF and run scripts. Use REQUIRE_SECRET=1 or network isolation
+  // when that is unacceptable.
+  withEnv(
+    {
+      NODE_ENV: "production",
+      CUSTOM_PLOT_API_SECRET: "prod-secret",
+      CUSTOM_PLOT_ALLOW_UNAUTHENTICATED: undefined,
+      CUSTOM_PLOT_REQUIRE_SECRET: undefined,
+    },
+    () => {
+      const minted = mods.session.mintCustomPlotSession("prod-secret");
+      const viaSession = mods.access.checkCustomPlotApiAccess(
+        new Request("http://localhost:43147/api/custom-plot", {
+          method: "POST",
+          headers: {
+            Cookie: `${mods.session.CUSTOM_PLOT_SESSION_COOKIE}=${minted.sessionToken}`,
+            [mods.session.CUSTOM_PLOT_CSRF_HEADER]: minted.csrfToken,
+          },
+        }),
+      );
+      assert.equal(viaSession.ok, true);
+      assert.equal(viaSession.via, "session");
+      // Knowing the API secret is not required for this path:
+      assert.equal(
+        viaSession.ok && !("x-custom-plot-secret" in {}),
+        true,
+      );
+    },
+  );
+});
+
 test("valid session cookie + CSRF authorizes without secret header", () => {
   withEnv(
     {
