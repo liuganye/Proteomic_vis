@@ -25,11 +25,9 @@ import type {
 import { GoEnrichmentPlot } from "./GoEnrichmentPlot";
 import { ResultsTable } from "./ResultsTable";
 
-const COLORS = {
-  up: "#0f766e",
-  down: "#b45309",
-  ns: "#94a3b8",
-};
+import { VOLCANO_COLORS } from "@/lib/chart-palette";
+
+const COLORS = VOLCANO_COLORS;
 
 interface Props {
   dataset: FragPipeDataset;
@@ -292,12 +290,12 @@ export function DownstreamPanel({
             </p>
           ) : (
             <>
-              <div className="h-96 w-full">
+              <div className="chart-frame h-56 w-full sm:h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <ScatterChart
                     margin={{ top: 12, right: 16, bottom: 12, left: 8 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
                     <XAxis
                       type="number"
                       dataKey="log2fc"

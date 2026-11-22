@@ -31,7 +31,10 @@ import { MissingnessPlot } from "./MissingnessPlot";
 import { QcProteinFilterBar } from "./QcProteinFilterBar";
 import { QcSummary } from "./QcSummary";
 import { SampleCorrelation } from "./SampleCorrelation";
+import { SampleIntensitySummary } from "./SampleIntensitySummary";
 import { UserDefinedPlot } from "./UserDefinedPlot";
+import { paddedDomain } from "@/lib/qc-plot";
+import { conditionColor } from "@/lib/stats";
 
 const BUILTIN_PLOT_ANCHOR: Record<
   Exclude<QcPlotId, `user-${string}`>,
@@ -93,7 +96,6 @@ export function QcPanel({
     [dataset, scope.ids],
   );
 
-  // Single metrics pass shared by summary + all plots (critical after large uploads).
   const bundle = useMemo(
     () => computeQcBundle(scopedDataset),
     [scopedDataset],
@@ -103,7 +105,6 @@ export function QcPanel({
     [scopedDataset, bundle.miss, bundle.boxes],
   );
   const [highlight, setHighlight] = useState<QcPlotId | null>(null);
-  // Mount plot cards after summary paints so upload → first paint feels snappier.
   const [plotsReady, setPlotsReady] = useState(false);
   useEffect(() => {
     setPlotsReady(false);
@@ -115,7 +116,7 @@ export function QcPanel({
     const id = plotAnchor(plotId);
     const el = document.getElementById(id);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
       setHighlight(plotId);
       window.setTimeout(() => {
         setHighlight((cur) => (cur === plotId ? null : cur));
@@ -130,9 +131,17 @@ export function QcPanel({
     if (focusPlotId && focusToken > 0 && plotsReady) jumpToPlot(focusPlotId);
   }, [focusPlotId, focusToken, jumpToPlot, plotsReady]);
 
+  const boxDomain = useMemo(
+    () =>
+      paddedDomain(
+        bundle.boxes.filter((b) => b.n > 0).flatMap((b) => [b.min, b.max]),
+      ),
+    [bundle.boxes],
+  );
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[color:var(--portal-border)] bg-white px-3 py-2 text-xs">
         <div className="flex flex-wrap items-center gap-2">
           <p data-testid="qc-selected-samples" aria-live="polite">
             <strong className="text-slate-700">Selected samples:</strong>{" "}
@@ -187,19 +196,21 @@ export function QcPanel({
           Preparing QC plots…
         </p>
       ) : (
-        <>
-          <section
-            aria-labelledby="qc-conventional-heading"
-            className="space-y-4"
-          >
+        <section aria-labelledby="qc-multiples-heading" className="space-y-2">
+          <div className="flex flex-wrap items-end justify-between gap-2">
             <h2
-              id="qc-conventional-heading"
-              className="border-b border-slate-200 pb-1.5 font-serif text-lg text-slate-900"
+              id="qc-multiples-heading"
+              className="font-serif text-lg text-slate-900"
             >
-              Conventional QC plots
+              QC small multiples
             </h2>
+            <p className="text-xs text-[color:var(--chart-muted)]">
+              ~9 views on one screen · 3×3 on desktop, stacks on narrow
+            </p>
+          </div>
 
-            <PlotCard
+          <div className="plot-multiples" data-testid="qc-plot-multiples">
+            <PlotCell
               anchorId={BUILTIN_PLOT_ANCHOR.missingness}
               highlighted={highlight === "missingness"}
             >
@@ -209,10 +220,11 @@ export function QcPanel({
                 colorMap={bundle.colorMap}
                 selectedSamples={selectedSamples}
                 onSelectSamples={onSelectSamples}
+                compact
               />
-            </PlotCard>
+            </PlotCell>
 
-            <PlotCard
+            <PlotCell
               anchorId={BUILTIN_PLOT_ANCHOR.intensity}
               highlighted={highlight === "intensity"}
             >
@@ -223,10 +235,22 @@ export function QcPanel({
                 colorMap={bundle.colorMap}
                 selectedSamples={selectedSamples}
                 onSelectSamples={onSelectSamples}
+                compact
               />
-            </PlotCard>
+            </PlotCell>
 
-            <PlotCard
+            <PlotCell anchorId="qc-plot-intensity-boxes" highlighted={false}>
+              <SampleIntensitySummary
+                boxes={bundle.boxes}
+                domain={boxDomain}
+                colorMap={bundle.colorMap}
+                selectedSamples={selectedSamples}
+                onSelectSamples={onSelectSamples}
+                compact
+              />
+            </PlotCell>
+
+            <PlotCell
               anchorId={BUILTIN_PLOT_ANCHOR.correlation}
               highlighted={highlight === "correlation"}
             >
@@ -236,19 +260,11 @@ export function QcPanel({
                 colorMap={bundle.colorMap}
                 selectedSamples={selectedSamples}
                 onSelectSamples={onSelectSamples}
+                compact
               />
-            </PlotCard>
-          </section>
+            </PlotCell>
 
-          <section aria-labelledby="qc-custom-heading" className="space-y-4">
-            <h2
-              id="qc-custom-heading"
-              className="border-b border-amber-200/80 pb-1.5 font-serif text-lg text-slate-900"
-            >
-              Custom QC plots
-            </h2>
-
-            <PlotCard
+            <PlotCell
               anchorId={BUILTIN_PLOT_ANCHOR["median-vs-missing"]}
               highlighted={highlight === "median-vs-missing"}
               tone="custom"
@@ -259,16 +275,32 @@ export function QcPanel({
                 colorMap={bundle.colorMap}
                 selectedSamples={selectedSamples}
                 onSelectSamples={onSelectSamples}
+                compact
               />
-            </PlotCard>
+            </PlotCell>
 
-            <CustomPlotBuilder
-              onAdd={onAddUserPlot}
-              sampleRows={sampleMetricRows}
-            />
+            <PlotCell anchorId="qc-plot-group-summary" highlighted={false}>
+              <GroupIntensityTable
+                groups={bundle.groups}
+                colorMap={bundle.colorMap}
+              />
+            </PlotCell>
+
+            <PlotCell
+              anchorId="qc-plot-custom-builder"
+              highlighted={false}
+              tone="custom"
+              className="plot-multiples__cell--builder"
+            >
+              <CustomPlotBuilder
+                onAdd={onAddUserPlot}
+                sampleRows={sampleMetricRows}
+                compact
+              />
+            </PlotCell>
 
             {userCustomPlots.map((spec) => (
-              <PlotCard
+              <PlotCell
                 key={spec.id}
                 anchorId={userPlotAnchorId(spec.id)}
                 highlighted={highlight === spec.id}
@@ -281,40 +313,113 @@ export function QcPanel({
                   colorMap={bundle.colorMap}
                   onRemove={onRemoveUserPlot}
                   onUpdate={onUpdateUserPlot}
+                  compact
                 />
-              </PlotCard>
+              </PlotCell>
             ))}
-          </section>
-        </>
+
+            {userCustomPlots.length < 2 &&
+              Array.from({ length: 2 - userCustomPlots.length }).map((_, i) => (
+                <PlotCell
+                  key={`slot-${i}`}
+                  anchorId={`qc-plot-slot-${i}`}
+                  highlighted={false}
+                  tone="custom"
+                >
+                  <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-1 px-3 text-center text-xs text-[color:var(--chart-muted)]">
+                    <strong className="text-sm text-slate-700">
+                      Custom plot slot
+                    </strong>
+                    <span>
+                      Build a chart or script plot — it lands here in the grid.
+                    </span>
+                  </div>
+                </PlotCell>
+              ))}
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-function PlotCard({
+function PlotCell({
   anchorId,
   highlighted,
   children,
   tone = "conventional",
+  className = "",
 }: {
   anchorId: string;
   highlighted: boolean;
   children: ReactNode;
   tone?: "conventional" | "custom";
+  className?: string;
 }) {
   return (
     <div
       id={anchorId}
       tabIndex={-1}
-      className={`scroll-mt-6 rounded-xl border bg-white p-4 shadow-sm outline-none transition sm:p-5 ${
-        tone === "custom" ? "border-amber-200/90" : "border-slate-200"
-      } ${
-        highlighted
-          ? "ring-2 ring-teal-700 ring-offset-2 ring-offset-slate-50"
-          : ""
-      }`}
+      className={`plot-multiples__cell ${tone === "custom" ? "plot-multiples__cell--custom" : ""} ${highlighted ? "is-highlighted" : ""} ${className}`}
     >
       {children}
+    </div>
+  );
+}
+
+function GroupIntensityTable({
+  groups,
+  colorMap,
+}: {
+  groups: { condition: string; nSamples: number; meanMissingPct: number; medianOfMedians: number }[];
+  colorMap: Record<string, string>;
+}) {
+  return (
+    <div>
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
+          Per-group intensity
+        </h3>
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          {groups.length} group{groups.length === 1 ? "" : "s"}
+        </span>
+      </header>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-2 py-1.5">Group</th>
+              <th className="px-2 py-1.5">n</th>
+              <th className="px-2 py-1.5">Miss %</th>
+              <th className="px-2 py-1.5">Med log₁₀</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.condition} className="border-t border-slate-100">
+                <td className="px-2 py-1.5 font-medium text-slate-900">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{
+                        background: conditionColor(g.condition, colorMap),
+                      }}
+                    />
+                    {g.condition}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 tabular-nums">{g.nSamples}</td>
+                <td className="px-2 py-1.5 tabular-nums">
+                  {g.meanMissingPct.toFixed(1)}
+                </td>
+                <td className="px-2 py-1.5 tabular-nums">
+                  {g.medianOfMedians.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -27,11 +27,13 @@ export function MissingnessPlot({
   colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
+  compact = false,
 }: {
   dataset: FragPipeDataset;
   /** Precomputed rows from computeQcBundle (avoids a second pass after upload). */
   rows?: MissRow[];
   colorMap?: Record<string, string>;
+  compact?: boolean;
 } & SampleSelectionProps) {
   const data = useMemo(
     () =>
@@ -154,27 +156,27 @@ export function MissingnessPlot({
         </div>
       </div>
       <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Missingness by sample chart. Scroll horizontally to inspect all sample labels.">
-      <div className="h-80 w-full" style={{ minWidth: Math.max(480, data.length * 18 + 80) }}>
+      <div className={`${compact ? "chart-frame h-48" : "h-80"} w-full`} style={{ minWidth: Math.max(compact ? 280 : 480, data.length * (compact ? 12 : 18) + 80) }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: compact ? 8 : 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
             <XAxis
               dataKey="sample"
               angle={-55}
               textAnchor="end"
               interval={0}
-              tick={{ fontSize: 11 }}
-              height={84}
+              tick={{ fontSize: compact ? 9 : 11 }}
+              height={compact ? 56 : 84}
             />
             <YAxis
               unit="%"
               domain={[0, 100]}
-              tick={{ fontSize: 12 }}
-              label={{
+              tick={{ fontSize: compact ? 10 : 12 }}
+              label={compact ? undefined : {
                 value: "% missing",
                 angle: -90,
                 position: "insideLeft",
-                style: { fontSize: 12, fill: "#64748b" },
+                style: { fontSize: 12, fill: "var(--chart-muted, #5a6b76)" },
               }}
             />
             <Tooltip

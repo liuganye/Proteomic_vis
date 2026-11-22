@@ -6,24 +6,24 @@ import type {
   VolcanoPoint,
 } from "./types";
 
-/** Distinct hues for arbitrary annotation groups (Human/QC keep familiar colors). */
+/** Distinct hues for arbitrary annotation groups — mirrors chart-palette.ts (no purple cliché). */
 const CONDITION_PALETTE = [
-  "#0f766e", // teal
-  "#b45309", // amber
-  "#1d4ed8", // blue
-  "#be185d", // pink
-  "#7c3aed", // violet
-  "#047857", // green
-  "#c2410c", // orange
-  "#0e7490", // cyan
-  "#a16207", // yellow-brown
-  "#475569", // slate
+  "#0d7377", // teal
+  "#c45c26", // burnt orange
+  "#2f5d8c", // steel blue
+  "#5a7a3a", // olive
+  "#8b4a3a", // brick
+  "#3d6b6e", // sea glass
+  "#a67c2d", // ochre
+  "#4a5560", // slate
+  "#1f6f5b", // forest
+  "#9a3412", // rust
 ];
 
 const PREFERRED_CONDITION_COLORS: Record<string, string> = {
-  "group a": "#0f766e",
+  "group a": "#0d7377",
   "group b": "#b45309",
-  human: "#0f766e",
+  human: "#0d7377",
   qc: "#b45309",
 };
 
@@ -37,7 +37,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
     seen.add(g);
     unique.push(g);
   }
-  const map: Record<string, string> = { Unknown: "#64748b" };
+  const map: Record<string, string> = { Unknown: "#8a9aa5" };
   let paletteIdx = 0;
   for (const g of unique) {
     const preferred = PREFERRED_CONDITION_COLORS[g.toLowerCase()];
@@ -53,7 +53,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
       paletteIdx += 1;
     }
     map[g] =
-      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#64748b";
+      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#8a9aa5";
     paletteIdx += 1;
   }
   return map;
@@ -64,7 +64,7 @@ export function conditionColor(
   colorMap: Record<string, string>,
 ): string {
   const g = (condition ?? "").trim() || "Unknown";
-  return colorMap[g] ?? colorMap.Unknown ?? "#64748b";
+  return colorMap[g] ?? colorMap.Unknown ?? "#8a9aa5";
 }
 
 /** Order samples by condition (annotation order), then sample name. */

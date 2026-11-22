@@ -31,11 +31,13 @@ export function IntensityDistribution({
   colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
+  compact = false,
 }: {
   dataset: FragPipeDataset;
   boxes?: BoxRow[];
   groups?: ReturnType<typeof groupQcStats>;
   colorMap?: Record<string, string>;
+  compact?: boolean;
 } & SampleSelectionProps) {
   const [groupFilter, setGroupFilter] = useState("");
   const [binCount, setBinCount] = useState(30);
@@ -58,50 +60,51 @@ export function IntensityDistribution({
     colorMapProp ?? buildConditionColorMap(groups.map((g) => g.condition));
   const visibleBoxes = boxes.filter(b => !groupFilter || b.condition === groupFilter);
 
-  return (
-    <div className="space-y-6">
+  const histogramBlock = (
       <div>
         <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-900">
             MaxLFQ intensity distribution
           </h3>
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700" data-testid="histogram-total">
-            {histogram.total.toLocaleString()} observations · {hist.length} bins · no sampling
+            {histogram.total.toLocaleString()} obs · {hist.length} bins
           </span>
         </header>
-        <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <div className={`mb-3 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ${compact ? "gap-2 px-2 py-1.5" : ""}`}>
           <label className="flex items-center gap-2">Intensity group
             <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1.5">
               <option value="">All groups</option>
               {groups.map(g => <option key={g.condition} value={g.condition}>{g.condition}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-2">Histogram bins
-            <select value={binCount} onChange={e => setBinCount(Number(e.target.value))} className="rounded-md border border-slate-300 bg-white px-2 py-1.5">
-              {[20, 30, 60].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </label>
+          {!compact && (
+            <label className="flex items-center gap-2">Histogram bins
+              <select value={binCount} onChange={e => setBinCount(Number(e.target.value))} className="rounded-md border border-slate-300 bg-white px-2 py-1.5">
+                {[20, 30, 60].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+          )}
           <span>{filteredDataset.samples.length} / {dataset.samples.length} samples · {groupFilter || "All groups"}</span>
         </div>
         {histogram.total === 0 ? <p className="text-sm text-slate-600">No positive, finite intensities to plot.</p> :
-        <div className="h-72 w-full">
+        <div className={`${compact ? "chart-frame h-48" : "h-72"} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={hist} barCategoryGap={0} margin={{ top: 8, right: 12, left: 12, bottom: 20 }}>
-              <CartesianGrid vertical={false} stroke="#e2e8f0" />
+            <BarChart data={hist} barCategoryGap={0} margin={{ top: 8, right: 12, left: compact ? 4 : 12, bottom: compact ? 8 : 20 }}>
+              <CartesianGrid vertical={false} stroke="var(--chart-grid, #d7e0e6)" />
               <XAxis
                 dataKey="midpoint"
                 tickFormatter={(value: number) => value.toFixed(2)}
                 tick={{ fontSize: 10 }}
                 interval={Math.max(0, Math.ceil(hist.length / 8) - 1)}
                 minTickGap={24}
-                label={{
+                label={compact ? undefined : {
                   value: "log10 MaxLFQ",
                   position: "insideBottom",
                   offset: -12,
-                  style: { fontSize: 12, fill: "#64748b" },
+                  style: { fontSize: 12, fill: "var(--chart-muted, #5a6b76)" },
                 }}
               />
-              <YAxis width={65} allowDecimals={false} tick={{ fontSize: 12 }} label={{ value: "Observations", angle: -90, position: "insideLeft", offset: -5, style: { fontSize: 11 } }} />
+              <YAxis width={compact ? 40 : 65} allowDecimals={false} tick={{ fontSize: compact ? 10 : 12 }} label={compact ? undefined : { value: "Observations", angle: -90, position: "insideLeft", offset: -5, style: { fontSize: 11 } }} />
               <Tooltip
                 content={({ active, payload }) => {
                   const bin = payload?.[0]?.payload as (typeof hist)[number] | undefined;
@@ -112,11 +115,20 @@ export function IntensityDistribution({
                   </div>;
                 }}
               />
-              <Bar dataKey="count" fill={groupFilter ? conditionColor(groupFilter, colorMap) : "#0f766e"} isAnimationActive={false} />
+              <Bar dataKey="count" fill={groupFilter ? conditionColor(groupFilter, colorMap) : "var(--chart-accent, #0d7377)"} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>}
       </div>
+  );
+
+  if (compact) {
+    return histogramBlock;
+  }
+
+  return (
+    <div className="space-y-6">
+      {histogramBlock}
 
       <SampleIntensitySummary boxes={visibleBoxes} domain={paddedDomain(boxes.filter(b => b.n > 0).flatMap(b => [b.min, b.max]))} colorMap={colorMap} selectedSamples={selectedSamples} onSelectSamples={onSelectSamples} />
 

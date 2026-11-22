@@ -31,6 +31,7 @@ import type {
   UserCustomPlotSpec,
 } from "@/lib/types";
 import { ChartSpecView } from "./ChartSpecView";
+import { CHART } from "@/lib/chart-palette";
 
 /** Debounce scope-driven re-runs so filter/selection churn does not fan out. */
 const SCRIPT_RERUN_DEBOUNCE_MS = 280;
@@ -61,6 +62,7 @@ export function UserDefinedPlot({
   colorMap: colorMapProp,
   onRemove,
   onUpdate,
+  compact = false,
 }: {
   dataset: FragPipeDataset;
   spec: UserCustomPlotSpec;
@@ -69,6 +71,7 @@ export function UserDefinedPlot({
   onRemove: (id: string) => void;
   /** Persist live chartSpec refreshes when QC protein scope changes. */
   onUpdate?: (id: string, patch: Pick<UserCustomPlotSpec, "chartSpec">) => void;
+  compact?: boolean;
 }) {
   const rows = precomputed ?? buildSampleMetricRows(dataset);
   const groups = useMemo(() => {
@@ -83,7 +86,8 @@ export function UserDefinedPlot({
   }, [rows]);
   const colorMap = colorMapProp ?? buildConditionColorMap(groups);
   const colorByGroup = (spec.colorBy ?? "group") === "group";
-  const defaultFill = "#0f766e";
+  const defaultFill = CHART.hex.accent;
+  void compact;
 
   const rowsKey = useMemo(
     () =>
@@ -306,10 +310,10 @@ function ScatterView({
   }, [rows, colorByGroup]);
 
   return (
-    <div className="h-80 w-full">
+    <div className="chart-frame h-48 w-full sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 12 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
           <XAxis
             type="number"
             dataKey={xKey}
@@ -415,10 +419,10 @@ function BarView({
   }, [rows, xKey, yKey]);
 
   return (
-    <div className="h-80 w-full">
+    <div className="chart-frame h-48 w-full sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 48 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
           <XAxis
             dataKey="category"
             angle={-35}
@@ -482,7 +486,7 @@ function HistogramView({
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={hist} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 10 }}
@@ -499,7 +503,7 @@ function HistogramView({
             formatter={(value) => [value, "Count"]}
             labelFormatter={(l) => `bin ~ ${l}`}
           />
-          <Bar dataKey="count" fill="#0f766e" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="count" fill="var(--chart-accent, #0d7377)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
