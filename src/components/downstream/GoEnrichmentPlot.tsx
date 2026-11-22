@@ -412,7 +412,10 @@ export function GoEnrichmentPlot({
 
           {result.unmappedForeground.length > 0 && (
             <p className="mt-3 text-xs text-slate-500">
-              Unmapped in significant set ({result.unmappedForeground.length}):{" "}
+              Unmapped for this aspect in the {direction} set (
+              {result.unmappedForeground.length}
+              ): non-human IDs, symbols outside the bundle, or genes lacking{" "}
+              {aspect === "all" ? "any" : aspect} terms —{" "}
               {result.unmappedForeground.slice(0, 24).join(", ")}
               {result.unmappedForeground.length > 24 ? "…" : ""}
             </p>
