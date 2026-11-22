@@ -20,6 +20,7 @@ Seven modules are available: volcano, results, sample abundance, protein details
 - `data/raw/`: original protein table and sample annotation.
 - `data/processed/`: existing abundance, differential results, sequence, location, network and structure indexes.
 - `data/external/pdb_files/`: four local PDB examples. `analysis/` and `reports/` contain earlier research material.
+- `close_loop_run/` & `configs/`: optional offline Python smoke CLI (`Automation 2`) and YAML configs for batch MaxQuant analysis and headless QC/volcano plot exports (independent of the Web app).
 
 [Q2 / Q3 改进说明（HTML，含前后对照、课件页码和检查步骤）](./QC_IMPROVEMENTS.zh-CN.html)
 
@@ -66,6 +67,33 @@ npm run dev
 ```
 
 Open <http://localhost:43147>. Windows was used for the validation described below; the macOS/Linux commands have not been independently tested.
+
+### Optional: Offline analysis CLI (`close_loop_run`)
+
+Not required for the Web app above. To run the standalone MaxQuant smoke analysis and headless plot exporter in `close_loop_run/`, install its Python dependencies (`pandas`, `numpy`, `scipy`, `matplotlib`, `PyYAML`) from the repository root:
+
+Windows PowerShell:
+
+```powershell
+py -3 -m venv .venv-cli
+.\.venv-cli\Scripts\python.exe -m pip install -r close_loop_run/requirements.txt
+$env:PYTHONPATH = "."
+.\.venv-cli\Scripts\python.exe -m close_loop_run `
+  --analysis configs/pair-01-maxlfq-hela-ecoli/analysis.yaml `
+  --viz configs/pair-01-maxlfq-hela-ecoli/viz.yaml
+```
+
+macOS / Linux:
+
+```sh
+python3 -m venv .venv-cli
+.venv-cli/bin/python -m pip install -r close_loop_run/requirements.txt
+PYTHONPATH=. .venv-cli/bin/python -m close_loop_run \
+  --analysis configs/pair-01-maxlfq-hela-ecoli/analysis.yaml \
+  --viz configs/pair-01-maxlfq-hela-ecoli/viz.yaml
+```
+
+See [close_loop_run/README.md](./close_loop_run/README.md) for output flags (`--outdir`, `--copy-to`). Input tables under `/data/smoke/` and outputs under `/runs/` are git-ignored.
 
 ## Demo walkthrough
 
