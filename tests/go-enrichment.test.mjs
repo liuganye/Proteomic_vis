@@ -15,6 +15,7 @@ async function loadGoEnrichment() {
   try {
     const files = [
       ["go-demo-mapping.ts", "../src/data/go-demo-mapping.ts"],
+      ["go-uniprot-to-gene.ts", "../src/data/go-uniprot-to-gene.ts"],
       ["types.ts", "../src/lib/types.ts"],
       ["go-enrichment.ts", "../src/lib/go-enrichment.ts"],
     ];
@@ -22,6 +23,7 @@ async function loadGoEnrichment() {
       let source = await readFile(new URL(rel, import.meta.url), "utf8");
       source = source
         .replaceAll("@/data/go-demo-mapping", "./go-demo-mapping.ts")
+        .replaceAll("@/data/go-uniprot-to-gene", "./go-uniprot-to-gene.ts")
         .replaceAll("@/lib/types", "./types.ts");
       const { outputText } = ts.transpileModule(source, {
         compilerOptions: {
@@ -30,20 +32,31 @@ async function loadGoEnrichment() {
           moduleResolution: ts.ModuleResolutionKind.NodeJs,
         },
       });
-      // Keep .ts extension out of emitted imports for Node ESM
       const js = outputText
         .replaceAll("./go-demo-mapping.ts", "./go-demo-mapping.js")
+        .replaceAll("./go-uniprot-to-gene.ts", "./go-uniprot-to-gene.js")
         .replaceAll("./types.ts", "./types.js");
       await writeFile(join(dir, outName.replace(/\.ts$/, ".js")), js);
     }
     return import(pathToFileURL(join(dir, "go-enrichment.js")).href);
   } finally {
-    // Keep temp until import settles — delay cleanup
     setTimeout(() => void rm(dir, { recursive: true, force: true }), 2000);
   }
 }
 
 const go = await loadGoEnrichment();
+
+function point(partial) {
+  return {
+    proteinId: partial.proteinId ?? partial.gene ?? "X",
+    gene: partial.gene ?? "",
+    log2fc: partial.log2fc ?? 2,
+    adjP: partial.adjP ?? 1e-6,
+    negLog10AdjP: partial.negLog10AdjP ?? 6,
+    significant: partial.significant ?? true,
+    direction: partial.direction ?? "up",
+  };
+}
 
 test("hypergeometricTail is 1 when k=0 and decreases for stronger enrichment", () => {
   assert.equal(go.hypergeometricTail(100, 10, 20, 0), 1);
@@ -112,6 +125,7 @@ test("enrichGoTerms ranks DNA repair among DNA-damage significant genes", () => 
   );
   assert.equal(result.ranking, "negLog10AdjP");
   assert.ok(result.terms[0].negLog10AdjP >= result.terms.at(-1).negLog10AdjP);
+  assert.equal(result.idColumnUsed, "Gene");
 });
 
 test("enrichGoTerms reports empty when no significant proteins", () => {
@@ -131,5 +145,106 @@ test("enrichGoTerms reports empty when no significant proteins", () => {
   assert.equal(result.terms.length, 0);
 });
 
-// silence unused
+test("extractUniprotAccession handles bare, isoform, and sp|ACC|NAME", () => {
+  assert.equal(go.extractUniprotAccession("P00441"), "P00441");
+  assert.equal(go.extractUniprotAccession("P00441-2"), "P00441");
+  assert.equal(go.extractUniprotAccession("sp|P00441|SODC_HUMAN"), "P00441");
+  assert.equal(go.extractUniprotAccession("tr|O14757|CHK1_HUMAN"), "O14757");
+  assert.equal(go.extractUniprotAccession("not-an-accession"), null);
+});
+
+test("resolveGoGene prefers Gene symbol then UniProt alias", () => {
+  const byGene = go.resolveGoGene({ gene: "sod1", proteinId: "P00441" });
+  assert.equal(byGene.key, "SOD1");
+  assert.equal(byGene.source, "gene");
+
+  const byAcc = go.resolveGoGene({ gene: "", proteinId: "P00441-1" });
+  assert.equal(byAcc.key, "SOD1");
+  assert.equal(byAcc.source, "uniprot");
+
+  const geneIsAcc = go.resolveGoGene({ gene: "P00441", proteinId: "P00441" });
+  assert.equal(geneIsAcc.key, "SOD1");
+  assert.equal(geneIsAcc.source, "uniprot");
+
+  const multi = go.resolveGoGene({
+    gene: "UNKNOWN;SOD1",
+    proteinId: "X",
+  });
+  assert.equal(multi.key, "SOD1");
+  assert.equal(multi.source, "gene");
+});
+
+test("real-upload-shaped UniProt-only list still enriches", () => {
+  // Mimics FragPipe rows where Gene is empty and stats copies proteinId into gene
+  const background = [
+    point({ proteinId: "P00441", gene: "", significant: true, direction: "up" }), // SOD1
+    point({ proteinId: "P00338", gene: "", significant: true, direction: "up" }), // LDHA
+    point({ proteinId: "P06733", gene: "", significant: true, direction: "up" }), // ENO1
+    point({ proteinId: "P04406", gene: "", significant: false, direction: "ns" }), // GAPDH
+    point({ proteinId: "P07437", gene: "", significant: false, direction: "ns" }), // TUBB
+    point({ proteinId: "P99999", gene: "", significant: true, direction: "up" }), // CYCS
+    point({ proteinId: "A0A0B4J2F0", gene: "", significant: true, direction: "up" }), // unmapped
+    point({
+      proteinId: "sp|P00924|ENOA_YEAST",
+      gene: "",
+      significant: true,
+      direction: "up",
+    }), // ENO1 via pipe
+  ];
+
+  const result = go.enrichGoTerms(background, {
+    aspect: "all",
+    direction: "significant",
+    topN: 10,
+    minHits: 2,
+  });
+
+  assert.ok(
+    result.annotatedForeground >= 3,
+    `expected mapped FG via UniProt, got ${result.annotatedForeground}`,
+  );
+  assert.ok(result.terms.length > 0, "expected enriched terms for UniProt-only upload");
+  assert.equal(result.idColumnUsed, "Protein ID");
+  assert.ok(result.resolvedViaUniprot >= 3);
+  assert.ok(result.unmappedForeground.includes("A0A0B4J2F0"));
+});
+
+test("real-upload-shaped mixed Gene + UniProt produces chart metadata", () => {
+  const points = [
+    point({ proteinId: "O14757", gene: "CHEK1", significant: true }),
+    point({ proteinId: "P06493", gene: "CDK1", significant: true }),
+    point({ proteinId: "P24941", gene: "", significant: true }), // CDK2 via UniProt
+    point({ proteinId: "P04637", gene: "TP53", significant: true }),
+    point({ proteinId: "P00519", gene: "ABL1", significant: false, direction: "ns", log2fc: 0.1, adjP: 0.9 }),
+    point({ proteinId: "ZZZZZZ", gene: "NOTAGOGENE", significant: true }),
+  ];
+
+  const result = go.enrichGoTerms(points, {
+    aspect: "BP",
+    direction: "significant",
+    topN: 10,
+    minHits: 2,
+  });
+
+  assert.ok(result.annotatedForeground >= 3);
+  assert.ok(result.terms.length > 0);
+  assert.ok(
+    result.idColumnUsed === "Gene" || result.idColumnUsed === "mixed",
+    `idColumnUsed=${result.idColumnUsed}`,
+  );
+  assert.ok(result.unmappedForeground.includes("NOTAGOGENE"));
+});
+
+test("empty mapping UX fields when nothing overlaps demo map", () => {
+  const points = [
+    point({ proteinId: "A0A0B4J2F0", gene: "PIGBOS1", significant: true }),
+    point({ proteinId: "A0A0J9YX57", gene: "MAGEB6B", significant: true }),
+  ];
+  const result = go.enrichGoTerms(points, { aspect: "all" });
+  assert.equal(result.annotatedForeground, 0);
+  assert.equal(result.terms.length, 0);
+  assert.equal(result.idColumnUsed, "none");
+  assert.ok(result.unmappedForeground.length >= 2);
+});
+
 void require;

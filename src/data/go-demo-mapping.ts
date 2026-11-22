@@ -3,7 +3,9 @@
  *
  * Not a full GO / UniProt dump — curated gene→term links covering the mock
  * FragPipe table genes plus common cancer/stress pathway symbols so uploads
- * with overlapping IDs still enrich. Real GO APIs remain out of scope here.
+ * with overlapping IDs still enrich. Pair with `go-uniprot-to-gene.ts` for
+ * accession→symbol aliases when FragPipe Gene is missing/sparse. Real GOA /
+ * UniProt APIs remain out of scope; expect unmapped IDs outside this set.
  */
 
 export type GoAspect = "BP" | "MF" | "CC";

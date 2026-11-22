@@ -179,8 +179,9 @@ export function DownstreamPanel({ dataset, module }: Props) {
           <div>
             <p className="text-sm text-slate-600">
               Enrich significant proteins from the current Group A vs Group B
-              contrast (same thresholds as Volcano). Gene symbols from the
-              protein table are matched to a bundled demo GO mapping.
+              contrast (same thresholds as Volcano). Gene symbols (then UniProt
+              accessions via a compact alias list) are matched to a bundled demo
+              GO mapping.
             </p>
           </div>
           {groupControls}
