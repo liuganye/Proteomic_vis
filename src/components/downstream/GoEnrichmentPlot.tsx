@@ -21,11 +21,9 @@ import {
 } from "@/lib/go-enrichment";
 import type { VolcanoPoint } from "@/lib/types";
 
-const ASPECT_COLORS: Record<GoAspect, string> = {
-  BP: "#0f766e",
-  MF: "#1d4ed8",
-  CC: "#b45309",
-};
+import { GO_ASPECT_COLORS } from "@/lib/chart-palette";
+
+const ASPECT_COLORS: Record<GoAspect, string> = GO_ASPECT_COLORS;
 
 interface Props {
   points: VolcanoPoint[];
@@ -299,7 +297,7 @@ export function GoEnrichmentPlot({
         </div>
       ) : (
         <>
-          <div className="h-[min(28rem,70vh)] w-full min-h-72">
+          <div className="chart-frame h-56 w-full min-h-48 sm:h-[min(22rem,50vh)]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 layout="vertical"

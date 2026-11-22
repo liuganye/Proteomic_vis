@@ -14,10 +14,12 @@ export function SampleIntensitySummary({
   domain,
   selectedSamples,
   onSelectSamples,
+  compact = false,
 }: {
   boxes: BoxRow[];
   colorMap: Record<string, string>;
   domain?: [number, number];
+  compact?: boolean;
 } & SampleSelectionProps) {
   const [sort, setSort] = useState("group");
   const [inspectedSample, setInspectedSample] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function SampleIntensitySummary({
     <section aria-label="Per-sample intensity comparison" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">
+          <h3 className={`${compact ? "text-base" : "text-lg"} font-semibold text-slate-900`}>
             Compare sample distributions
           </h3>
           <p className="text-sm text-slate-600">

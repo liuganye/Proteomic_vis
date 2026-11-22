@@ -5,26 +5,16 @@ import type {
   QcConclusion,
   VolcanoPoint,
 } from "./types";
+import { CHART } from "./chart-palette";
 
-/** Distinct hues for arbitrary annotation groups (Human/QC keep familiar colors). */
-const CONDITION_PALETTE = [
-  "#0f766e", // teal
-  "#b45309", // amber
-  "#1d4ed8", // blue
-  "#be185d", // pink
-  "#7c3aed", // violet
-  "#047857", // green
-  "#c2410c", // orange
-  "#0e7490", // cyan
-  "#a16207", // yellow-brown
-  "#475569", // slate
-];
+/** Distinct hues for arbitrary annotation groups — single source: chart-palette. */
+const CONDITION_PALETTE = [...CHART.hex.series];
 
 const PREFERRED_CONDITION_COLORS: Record<string, string> = {
-  "group a": "#0f766e",
-  "group b": "#b45309",
-  human: "#0f766e",
-  qc: "#b45309",
+  "group a": CHART.hex.up,
+  "group b": CHART.hex.down,
+  human: CHART.hex.up,
+  qc: CHART.hex.down,
 };
 
 /** Stable color map for every condition/group label present. */
@@ -37,7 +27,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
     seen.add(g);
     unique.push(g);
   }
-  const map: Record<string, string> = { Unknown: "#64748b" };
+  const map: Record<string, string> = { Unknown: CHART.hex.ns };
   let paletteIdx = 0;
   for (const g of unique) {
     const preferred = PREFERRED_CONDITION_COLORS[g.toLowerCase()];
@@ -53,7 +43,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
       paletteIdx += 1;
     }
     map[g] =
-      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#64748b";
+      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? CHART.hex.ns;
     paletteIdx += 1;
   }
   return map;
@@ -64,7 +54,7 @@ export function conditionColor(
   colorMap: Record<string, string>,
 ): string {
   const g = (condition ?? "").trim() || "Unknown";
-  return colorMap[g] ?? colorMap.Unknown ?? "#64748b";
+  return colorMap[g] ?? colorMap.Unknown ?? CHART.hex.ns;
 }
 
 /** Order samples by condition (annotation order), then sample name. */
