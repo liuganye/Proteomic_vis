@@ -37,22 +37,33 @@ export function FileUploadPanel({
   const [proteinFile, setProteinFile] = useState<File | null>(null);
   const [annFile, setAnnFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  /** User intent while idle/loading; overridden by loaded dataset when ready. */
+  /** User intent while idle/loading; synced from dataset when ready unless uploading. */
   const [intent, setIntent] = useState<PortalSource>("upload");
+  /** Explicit Upload selection while mock/real data is still loaded — shows dropzone. */
+  const [uploadOverride, setUploadOverride] = useState(false);
   const loading = state.status === "loading";
   const loaded = sourceFromDataset(state.dataset);
-  const source: PortalSource =
-    state.status === "ready" && loaded ? loaded : intent;
+  const source: PortalSource = uploadOverride
+    ? "upload"
+    : state.status === "ready" && loaded
+      ? loaded
+      : intent;
 
-  // Keep selection aligned with whatever is actually loaded (auto-loadReal, Clear, etc.).
+  // Sync radio from loaded dataset; do not clobber an in-progress Upload override.
   useEffect(() => {
     if (state.status === "ready" && state.dataset) {
       const next = sourceFromDataset(state.dataset);
-      if (next) setIntent(next);
+      if (!next) return;
+      if (uploadOverride && next !== "upload") return;
+      setUploadOverride(false);
+      setIntent(next);
       return;
     }
-    if (state.status === "idle") setIntent("upload");
-  }, [state.status, state.dataset]);
+    if (state.status === "idle") {
+      setUploadOverride(false);
+      setIntent("upload");
+    }
+  }, [state.status, state.dataset, uploadOverride]);
 
   const assignFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files);
@@ -70,15 +81,23 @@ export function FileUploadPanel({
       list.find((f) => f !== protein && /\.(tsv|txt)$/i.test(f.name));
     if (protein) setProteinFile(protein);
     if (annotation) setAnnFile(annotation);
+    setUploadOverride(true);
     setIntent("upload");
   }, []);
 
   const parseNow = useCallback(() => {
     if (!proteinFile || loading) return;
+    setUploadOverride(false);
     onLoadFiles(proteinFile, annFile);
   }, [proteinFile, annFile, loading, onLoadFiles]);
 
   const activateSource = (next: PortalSource) => {
+    if (next === "upload") {
+      setUploadOverride(true);
+      setIntent("upload");
+      return;
+    }
+    setUploadOverride(false);
     setIntent(next);
     if (next === "mock" && !loading) onLoadMock();
     if (next === "real" && !loading) onLoadReal();
@@ -114,6 +133,7 @@ export function FileUploadPanel({
               setAnnFile(null);
               if (proteinRef.current) proteinRef.current.value = "";
               if (annRef.current) annRef.current.value = "";
+              setUploadOverride(false);
               setIntent("upload");
               onClear();
             }}
@@ -185,6 +205,7 @@ export function FileUploadPanel({
                 className="data-portal__file-input"
                 onChange={(e) => {
                   setProteinFile(e.target.files?.[0] ?? null);
+                  setUploadOverride(true);
                   setIntent("upload");
                 }}
                 disabled={loading}
@@ -210,6 +231,7 @@ export function FileUploadPanel({
                 className="data-portal__file-input data-portal__file-input--secondary"
                 onChange={(e) => {
                   setAnnFile(e.target.files?.[0] ?? null);
+                  setUploadOverride(true);
                   setIntent("upload");
                 }}
                 disabled={loading}
@@ -234,18 +256,31 @@ export function FileUploadPanel({
         </div>
       )}
 
+      {source === "upload" &&
+        uploadOverride &&
+        state.status === "ready" &&
+        state.dataset &&
+        state.dataset.source !== "upload" && (
+          <p className="data-portal__banner">
+            Current {state.dataset.source === "mock" ? "mock" : "Real HYE"}{" "}
+            dataset stays loaded until you Parse uploads (replaces it) or Clear.
+            Pick Mock or Real HYE above to switch without uploading.
+          </p>
+        )}
+
       {source === "mock" && state.status === "ready" && state.dataset?.source === "mock" && (
         <p className="data-portal__banner data-portal__banner--mock">
           Synthetic demo · 120 proteins · Group A: 4 samples (A_1–A_4) · Group B:
           3 samples (B_1–B_3). Illustrative values only — QC checks all seven
-          samples; Group A vs Group B statistics are for demonstration.
+          samples; Group A vs Group B statistics are for demonstration. Use Upload
+          TSV above to replace with your files.
         </p>
       )}
 
       {source === "real" && state.status === "ready" && state.dataset?.source === "real" && (
         <p className="data-portal__banner">
-          Real HYE FragPipe snapshot loaded. Switch to Mock or Upload TSV above
-          to change source; Clear resets the portal.
+          Real HYE FragPipe snapshot loaded. Use Mock or Upload TSV above to switch
+          source (Upload keeps this data until Parse or Clear).
         </p>
       )}
 
