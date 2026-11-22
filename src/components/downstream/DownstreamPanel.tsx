@@ -212,8 +212,9 @@ export function DownstreamPanel({
             <p className="text-sm text-slate-600">
               Enrich significant proteins from the current Group A vs Group B
               contrast (same thresholds as Volcano). Gene symbols (then UniProt
-              accessions via a compact alias list) are matched to a bundled demo
-              GO mapping. Click a term to select its foreground proteins for QC.
+              accessions via the bundled alias list) are matched to the client
+              GO map covering human genes from the shipped FragPipe sample.
+              Click a term to select its foreground proteins for QC.
             </p>
           </div>
           {groupControls}

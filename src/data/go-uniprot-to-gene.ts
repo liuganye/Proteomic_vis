@@ -1,89 +1,14 @@
 /**
- * Compact UniProt accession → gene symbol aliases for client-side GO enrichment.
+ * UniProt accession → gene symbol aliases for client-side GO enrichment.
  *
- * Built from FragPipe-style rows whose Gene symbols already exist in
- * `GO_DEMO_GENE_TERMS` and whose Organism is Homo sapiens (supplementary /
- * raw combined_protein.tsv). Non-human ortholog accessions (yeast, E. coli,
- * horse, bovine, …) are intentionally omitted so they do not enrich under
- * human GO symbols. This is NOT a full UniProt or GOA dump.
- *
- * Limits: ~73 human accessions covering the curated demo gene set
- * that appear in the shipped sample table. Novel accessions outside this list
- * remain unmapped; use a proper GO tool for production enrichment.
+ * Built from Homo sapiens FragPipe rows in the shipped sample table whose
+ * Gene symbols exist in the bundled GO map (`go-bundle.json`). Regenerated
+ * with `scripts/build-go-bundle.py`. Non-human ortholog accessions are
+ * omitted. Not a full UniProt dump — accessions outside this list stay
+ * unresolved unless the Gene column already matches the GO map.
  */
 
-export const GO_UNIPROT_TO_GENE: Record<string, string> = {
-  O14757: "CHEK1",
-  O14965: "AURKA",
-  O43683: "BUB1",
-  O75533: "SF3B1",
-  O75874: "IDH1",
-  P00338: "LDHA",
-  P00441: "SOD1",
-  P00519: "ABL1",
-  P01112: "HRAS",
-  P02545: "LMNA",
-  P04040: "CAT",
-  P04083: "ANXA1",
-  P04406: "GAPDH",
-  P06400: "RB1",
-  P06493: "CDK1",
-  P06730: "EIF4E",
-  P06733: "ENO1",
-  P06748: "NPM1",
-  P07237: "P4HB",
-  P07355: "ANXA2",
-  P07437: "TUBB",
-  P07900: "HSP90AA1",
-  P08670: "VIM",
-  P09211: "GSTP1",
-  P09651: "HNRNPA1",
-  P09874: "PARP1",
-  P0DMV8: "HSPA1A",
-  P10599: "TXN",
-  P11021: "HSPA5",
-  P11802: "CDK4",
-  P11940: "PABPC1",
-  P12004: "PCNA",
-  P13073: "COX4I1",
-  P13639: "EEF2",
-  P14618: "PKM",
-  P16220: "CREB1",
-  P19338: "NCL",
-  P19838: "NFKB1",
-  P20700: "LMNB1",
-  P23443: "RPS6KB1",
-  P24941: "CDK2",
-  P25705: "ATP5F1A",
-  P27797: "CALR",
-  P27824: "CANX",
-  P28482: "MAPK1",
-  P30101: "PDIA3",
-  P31040: "SDHA",
-  P31749: "AKT1",
-  P31930: "UQCRC1",
-  P40763: "STAT3",
-  P40926: "MDH2",
-  P42224: "STAT1",
-  P42229: "STAT5A",
-  P42345: "MTOR",
-  P42574: "CASP3",
-  P46777: "RPL5",
-  P49736: "MCM2",
-  P53350: "PLK1",
-  P55211: "CASP9",
-  P60709: "ACTB",
-  P62753: "RPS6",
-  P67809: "YBX1",
-  P68104: "EEF1A1",
-  P99999: "CYCS",
-  Q00534: "CDK6",
-  Q04206: "RELA",
-  Q06830: "PRDX1",
-  Q07812: "BAX",
-  Q07955: "SRSF1",
-  Q12834: "CDC20",
-  Q15382: "RHEB",
-  Q16795: "NDUFA9",
-  Q8N122: "RPTOR",
-};
+import goBundle from "./go-bundle.json";
+
+export const GO_UNIPROT_TO_GENE: Record<string, string> =
+  goBundle.uniprotToGene as Record<string, string>;

@@ -8,6 +8,11 @@ import ts from "typescript";
 
 async function loadFilterLib() {
   const dir = await mkdtemp(join(tmpdir(), "qc-filter-"));
+  const bundleRaw = await readFile(
+    new URL("../src/data/go-bundle.json", import.meta.url),
+    "utf8",
+  );
+  await writeFile(join(dir, "go-bundle.json"), bundleRaw);
   const files = [
     ["go-demo-mapping.ts", "../src/data/go-demo-mapping.ts"],
     ["go-uniprot-to-gene.ts", "../src/data/go-uniprot-to-gene.ts"],
@@ -24,6 +29,10 @@ async function loadFilterLib() {
       .replaceAll("@/lib/go-enrichment", "./go-enrichment.ts")
       .replaceAll("@/lib/stats", "./stats-stub.ts")
       .replaceAll("@/data/go-demo-mapping", "./go-demo-mapping.ts");
+    source = source.replace(
+      /import goBundle from ["']\.\/go-bundle\.json["'];?/g,
+      'import { createRequire as __createRequire } from "module";\nconst goBundle = __createRequire(import.meta.url)("./go-bundle.json");',
+    );
     const { outputText } = ts.transpileModule(source, {
       compilerOptions: {
         module: ts.ModuleKind.ESNext,

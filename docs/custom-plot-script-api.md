@@ -129,7 +129,7 @@ TypeScript helpers: `src/lib/custom-plot-script.ts` (`parseScriptRegistration`, 
 
 QC conventional + custom/script plots honor AppShell protein scope:
 
-1. **Feature filter** — discovered from Downstream-visible annotations (`src/lib/qc-protein-filter.ts`): GO aspect/term (demo map), gene symbol presence, protein probability buckets, default volcano DE call.
+1. **Feature filter** — discovered from Downstream-visible annotations (`src/lib/qc-protein-filter.ts`): GO aspect/term (bundled GO map), gene symbol presence, protein probability buckets, default volcano DE call.
 2. **Downstream selection** — volcano clicks, results-table toggles, and GO term bars set `selectedProteinIds`; clearing selection refreshes QC to the broader scope.
 3. When both are active, QC uses the **intersection**. Empty scope shows an explicit empty state without breaking upload/mock load.
 4. **Script plots** re-run via `POST /api/custom-plot` on the scoped sample rows whenever that scope changes, so the chart matches the filter bar.
