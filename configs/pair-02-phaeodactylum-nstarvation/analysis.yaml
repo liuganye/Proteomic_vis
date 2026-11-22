@@ -1,0 +1,98 @@
+meta:
+  run_id: pair-02-phaeodactylum-nstarvation
+  project: close-loop AI for proteomic data analysis
+  out_dir: runs/pair-02-phaeodactylum-nstarvation
+  graceful_skip_missing: true
+
+dataset:
+  name: PXD033328-phaeodactylum-nstarvation
+  plugin: generic_maxlfq
+  # Paper used iBAQ + limma/ProStaR; prefer iBAQ for this pair
+  intensity_mode: ibaq
+  matrix_path: data/smoke/pair-02-phaeodactylum-nstarvation/txt/proteinGroups.txt
+  protein_col: Majority protein IDs
+  format: tsv
+
+samples:
+  # p* = +N control; m* = −N treatment
+  column_groups:
+    p1: control
+    p2: control
+    p3: control
+    m1: treatment
+    m2: treatment
+    m3: treatment
+  control_label: control
+  treatment_label: treatment
+  min_n_per_arm: 2
+
+filters:
+  contam_filter: maxquant_or_fragpipe
+  zeros_as_nan: true
+
+missingness:
+  nan_freq_scope: contrast_columns
+  allow_partial: true
+
+imputation:
+  methods: [perseus_left_censored]
+  perseus:
+    shift: 1.8
+    width: 0.3
+  seed: 42
+
+normalization:
+  # Sample-wise median centering on log2 intensities
+  median_center: true
+
+abundance:
+  scope: contrast_columns
+  log: log10_mean
+
+se:
+  enabled: true
+  formula: welch_se_delta
+  contrast: control_minus_treatment
+  qc_arm: omit
+  tertiles: 3
+
+differential:
+  # limma-like moderated t (empirical Bayes) — closer to ProStaR/limma than plain Welch
+  enabled: true
+  test: limma_like_moderated_ttest
+  fdr: bh
+  alpha: 0.05
+  exploratory:
+    alpha: 0.1
+    abs_log2_fc_cutoff: 0.585
+
+annotation:
+  fasta_header_column: Fasta headers
+  # Keyword themes mined from Fasta headers when Gene names are absent
+  theme_keywords:
+    proteasome: ["proteasome", "proteasomal"]
+    ribosome_translation: ["ribosom", "translation", "elongation factor"]
+    amino_acid_metabolism: ["amino.?acid", "glutamine", "glutamate", "urea", "arginase", "deaminase"]
+    nitrogen_scavenging: ["nitrate", "nitrite", "urease", "amidase", "nitrogen"]
+    fatty_acid_desaturase: ["desaturase", "palmitoyl", "acyl.?acp", "fatty acid"]
+    # Iter2+: finer carbon-rewiring / plastid FA markers
+    palmitoyl_acp_desaturase: ["palmitoyl", "acyl-ACP desaturase", "acyl.?ACP.?desaturase"]
+
+diagnostics:
+  # Iter2 Agent5: explicit up/down theme table for Interpreter
+  theme_direction: true
+  theme_direction_abs_log2_fc: 0.585
+  # Iter5 Agent5: multi-threshold DAP table (paper 384 vs pipeline cuts)
+  dap_threshold_grid: true
+
+tech_bio:
+  enabled: false
+  tech_rule: se_low_fallback
+  non_se_proxy: none
+
+mistaken_id:
+  enabled: false
+
+logging:
+  format: jsonl
+  dir: runs/pair-02-phaeodactylum-nstarvation/logs
