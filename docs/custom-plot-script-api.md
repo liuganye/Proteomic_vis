@@ -17,10 +17,12 @@ Stable contract for **QC → Custom → Script / Advanced**. Humans author scrip
 | Development (`NODE_ENV !== production`) | Open | Set `CUSTOM_PLOT_REQUIRE_SECRET=1` + `CUSTOM_PLOT_API_SECRET` to require `x-custom-plot-secret` |
 | Production | **Disabled** until configured | Set `CUSTOM_PLOT_API_SECRET` (recommended) **or** explicitly `CUSTOM_PLOT_ALLOW_UNAUTHENTICATED=1` |
 
-When a secret is configured:
+When a secret is configured, **`Origin` / `Sec-Fetch-Site` alone never authorize** (those headers are forgeable). Callers must use one of:
 
-- Non-same-origin / AI callers must send header `x-custom-plot-secret: <secret>`.
-- Same-origin browser UI (`Sec-Fetch-Site: same-origin`) may call without embedding the secret in client JS (unless `CUSTOM_PLOT_REQUIRE_SECRET=1`).
+1. **API secret** — header `x-custom-plot-secret: <secret>` (AI / automation).
+2. **Browser session** — `GET /api/custom-plot/session` sets an HttpOnly `custom_plot_sess` cookie and returns a short-lived CSRF token; the in-app UI then POSTs with `credentials: "same-origin"` and header `x-custom-plot-csrf`. The secret never ships in client JS.
+
+`CUSTOM_PLOT_REQUIRE_SECRET=1` disables session minting and requires the API secret header for every caller (including the UI).
 
 Do not publish the app network-reachable with `CUSTOM_PLOT_ALLOW_UNAUTHENTICATED=1` unless you accept arbitrary script execution on that host.
 
@@ -140,7 +142,7 @@ QC conventional + custom/script plots honor AppShell protein scope:
 | Samples rows | 500 |
 | chartSpec.data rows | 2_000 |
 | Timeout | 3 s |
-| Python | No `open` / `import` / `eval` / `exec` / `__` dunders; minimal child env (`PATH`/`LANG`/`HOME`/… only) |
+| Python | No `open` / `import` / `eval` / `exec` / `__` dunders; minimal child env (pinned PATH + dedicated scratch HOME/TMPDIR — not host PATH/HOME) |
 | JS (`vm`) | No `require` / `process` / `fetch`; `vm.Script` + timeout; not a full OS sandbox |
 | Persistence | Session UI only (same as simple custom plots); cleared with dataset Clear |
 

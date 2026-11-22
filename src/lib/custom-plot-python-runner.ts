@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { ChartSpec } from "@/lib/types";
 import { SCRIPT_LIMITS, isChartSpec } from "@/lib/custom-plot-script";
@@ -8,21 +10,64 @@ function runnerPath(): string {
   return path.join(process.cwd(), "scripts", "custom_plot_runner.py");
 }
 
-/** Minimal env for the Python child — never spread process.env. */
+/** Dedicated scratch dir — never reuse the host HOME. */
+export function pythonScratchDir(): string {
+  const dir = path.join(os.tmpdir(), "proteomic-custom-plot");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Resolve interpreter to an absolute path when possible so PATH can stay minimal.
+ */
+export function resolvePythonBinary(pythonPathHint?: string): string {
+  const hint =
+    pythonPathHint?.trim() ||
+    process.env.CUSTOM_PLOT_PYTHON?.trim() ||
+    "python3";
+  if (path.isAbsolute(hint)) return hint;
+  // Prefer well-known absolute locations over inheriting a wide host PATH.
+  const candidates = [
+    `/usr/bin/${hint}`,
+    `/bin/${hint}`,
+    hint === "python3" ? "/usr/local/bin/python3" : "",
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) return c;
+    } catch {
+      // ignore
+    }
+  }
+  return hint;
+}
+
+/**
+ * Minimal env for the Python child — never spread process.env.
+ * PATH is pinned to the interpreter dir + /usr/bin:/bin (not the host PATH).
+ * HOME/TMPDIR point at a dedicated scratch directory.
+ */
 export function pythonChildEnv(pythonPathHint?: string): Record<string, string> {
-  const pathEnv = process.env.PATH ?? "/usr/bin:/bin";
+  const pythonBin = resolvePythonBinary(pythonPathHint);
+  const binDir = path.isAbsolute(pythonBin)
+    ? path.dirname(pythonBin)
+    : "/usr/bin";
+  const scratch = pythonScratchDir();
+  const pathParts = Array.from(
+    new Set([binDir, "/usr/bin", "/bin"].filter(Boolean)),
+  );
   const env: Record<string, string> = {
-    PATH: pathEnv,
-    LANG: process.env.LANG || "C.UTF-8",
-    LC_ALL: process.env.LC_ALL || process.env.LANG || "C.UTF-8",
-    HOME: process.env.HOME || "/tmp",
-    TMPDIR: process.env.TMPDIR || "/tmp",
+    PATH: pathParts.join(":"),
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    HOME: scratch,
+    TMPDIR: scratch,
+    TMP: scratch,
+    TEMP: scratch,
     PYTHONPATH: "",
     PYTHONDONTWRITEBYTECODE: "1",
     PYTHONNOUSERSITE: "1",
   };
-  // Interpreter path hint only — never copy secrets from process.env.
-  if (pythonPathHint) env.CUSTOM_PLOT_PYTHON = pythonPathHint;
   return env;
 }
 
@@ -45,14 +90,15 @@ export function runPythonCustomPlot(options: {
   } = options;
 
   const payload = JSON.stringify({ source, samples, inputs });
+  const resolvedPython = resolvePythonBinary(pythonPath);
 
   return new Promise((resolve, reject) => {
     const child: ChildProcessWithoutNullStreams = spawn(
-      pythonPath,
+      resolvedPython,
       [runnerPath()],
       {
         stdio: ["pipe", "pipe", "pipe"],
-        env: pythonChildEnv(pythonPath) as NodeJS.ProcessEnv,
+        env: pythonChildEnv(resolvedPython) as NodeJS.ProcessEnv,
       },
     );
 
@@ -113,8 +159,7 @@ export function runPythonCustomPlot(options: {
       }
       reject(
         new Error(
-          result.error ||
-            `Python script failed (exit ${code ?? "?"})`,
+          result.error || `Python script failed (exit ${code ?? "?"})`,
         ),
       );
     });
