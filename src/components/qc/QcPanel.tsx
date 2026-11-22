@@ -55,6 +55,7 @@ export function QcPanel({
   userCustomPlots,
   onAddUserPlot,
   onRemoveUserPlot,
+  onUpdateUserPlot,
   selectedSamples,
   onSelectSamples,
   selectedProteinIds = [],
@@ -68,6 +69,10 @@ export function QcPanel({
   userCustomPlots: UserCustomPlotSpec[];
   onAddUserPlot: (spec: UserCustomPlotSpec) => void;
   onRemoveUserPlot: (id: string) => void;
+  onUpdateUserPlot?: (
+    id: string,
+    patch: Pick<UserCustomPlotSpec, "chartSpec">,
+  ) => void;
   selectedProteinIds?: string[];
   onClearProteinSelection?: () => void;
   proteinFilter?: QcProteinFilter;
@@ -275,6 +280,7 @@ export function QcPanel({
                   rows={sampleMetricRows}
                   colorMap={bundle.colorMap}
                   onRemove={onRemoveUserPlot}
+                  onUpdate={onUpdateUserPlot}
                 />
               </PlotCard>
             ))}

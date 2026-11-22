@@ -8,6 +8,24 @@ function runnerPath(): string {
   return path.join(process.cwd(), "scripts", "custom_plot_runner.py");
 }
 
+/** Minimal env for the Python child — never spread process.env. */
+export function pythonChildEnv(pythonPathHint?: string): Record<string, string> {
+  const pathEnv = process.env.PATH ?? "/usr/bin:/bin";
+  const env: Record<string, string> = {
+    PATH: pathEnv,
+    LANG: process.env.LANG || "C.UTF-8",
+    LC_ALL: process.env.LC_ALL || process.env.LANG || "C.UTF-8",
+    HOME: process.env.HOME || "/tmp",
+    TMPDIR: process.env.TMPDIR || "/tmp",
+    PYTHONPATH: "",
+    PYTHONDONTWRITEBYTECODE: "1",
+    PYTHONNOUSERSITE: "1",
+  };
+  // Interpreter path hint only — never copy secrets from process.env.
+  if (pythonPathHint) env.CUSTOM_PLOT_PYTHON = pythonPathHint;
+  return env;
+}
+
 /**
  * Run a Python custom-plot snippet via the constrained subprocess runner.
  */
@@ -34,11 +52,7 @@ export function runPythonCustomPlot(options: {
       [runnerPath()],
       {
         stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          PYTHONPATH: "",
-          PYTHONDONTWRITEBYTECODE: "1",
-        },
+        env: pythonChildEnv(pythonPath) as NodeJS.ProcessEnv,
       },
     );
 
@@ -82,8 +96,8 @@ export function runPythonCustomPlot(options: {
       } catch {
         reject(
           new Error(
-            stderr.trim() ||
-              `Python runner returned non-JSON (exit ${code ?? "?"})`,
+            // Prefer runner JSON errors; avoid dumping raw stderr paths to callers.
+            `Python runner returned non-JSON (exit ${code ?? "?"})`,
           ),
         );
         return;
@@ -100,7 +114,6 @@ export function runPythonCustomPlot(options: {
       reject(
         new Error(
           result.error ||
-            stderr.trim() ||
             `Python script failed (exit ${code ?? "?"})`,
         ),
       );

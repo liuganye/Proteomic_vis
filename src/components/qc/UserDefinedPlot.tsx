@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -19,11 +19,16 @@ import {
   metricLabel,
   type SampleMetricRow,
 } from "@/lib/custom-plot-metrics";
+import type { CustomPlotRunResponse } from "@/lib/custom-plot-script";
 import {
   buildConditionColorMap,
   conditionColor,
 } from "@/lib/stats";
-import type { FragPipeDataset, UserCustomPlotSpec } from "@/lib/types";
+import type {
+  ChartSpec,
+  FragPipeDataset,
+  UserCustomPlotSpec,
+} from "@/lib/types";
 import { ChartSpecView } from "./ChartSpecView";
 
 function buildHistogram(values: number[], bins = 20) {
@@ -51,12 +56,15 @@ export function UserDefinedPlot({
   rows: precomputed,
   colorMap: colorMapProp,
   onRemove,
+  onUpdate,
 }: {
   dataset: FragPipeDataset;
   spec: UserCustomPlotSpec;
   rows?: SampleMetricRow[];
   colorMap?: Record<string, string>;
   onRemove: (id: string) => void;
+  /** Persist live chartSpec refreshes when QC protein scope changes. */
+  onUpdate?: (id: string, patch: Pick<UserCustomPlotSpec, "chartSpec">) => void;
 }) {
   const rows = precomputed ?? buildSampleMetricRows(dataset);
   const groups = useMemo(() => {
@@ -73,6 +81,84 @@ export function UserDefinedPlot({
   const colorByGroup = (spec.colorBy ?? "group") === "group";
   const defaultFill = "#0f766e";
 
+  const rowsKey = useMemo(
+    () =>
+      JSON.stringify(
+        rows.map((r) => [
+          r.sample,
+          r.group,
+          r.missingPct,
+          r.medianLog10,
+          r.nDetected,
+          r.q1,
+          r.q3,
+        ]),
+      ),
+    [rows],
+  );
+  const [scriptStatus, setScriptStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const [liveChart, setLiveChart] = useState<ChartSpec | undefined>(
+    spec.chartSpec,
+  );
+
+  // Keep display in sync when parent patches chartSpec after a successful run.
+  useEffect(() => {
+    if (spec.chartSpec) setLiveChart(spec.chartSpec);
+  }, [spec.chartSpec]);
+
+  // Re-run script against the current scoped sample rows whenever scope changes.
+  useEffect(() => {
+    if (spec.kind !== "script" || !spec.source?.trim()) return;
+    let cancelled = false;
+    setScriptStatus("loading");
+    setScriptError(null);
+
+    const run = async () => {
+      try {
+        const res = await fetch("/api/custom-plot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            language: spec.language ?? "python",
+            source: spec.source,
+            samples: rows,
+            inputs: spec.inputs ?? {},
+          }),
+        });
+        const body = (await res.json()) as CustomPlotRunResponse;
+        if (cancelled) return;
+        if (!body.ok) {
+          setScriptError(body.error || `Run failed (HTTP ${res.status})`);
+          setScriptStatus("error");
+          return;
+        }
+        setLiveChart(body.chartSpec);
+        onUpdate?.(spec.id, { chartSpec: body.chartSpec });
+        setScriptStatus("idle");
+      } catch (err) {
+        if (cancelled) return;
+        setScriptError(err instanceof Error ? err.message : String(err));
+        setScriptStatus("error");
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit onUpdate — parent setters are unstable; rowsKey drives refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    spec.kind,
+    spec.id,
+    spec.source,
+    spec.language,
+    spec.inputs,
+    rowsKey,
+  ]);
+
   return (
     <div>
       <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -86,7 +172,7 @@ export function UserDefinedPlot({
           <h3 className="text-lg font-semibold text-slate-900">{spec.title}</h3>
           <p className="text-sm text-slate-600">
             {spec.kind === "script"
-              ? "Scripted QC view over sample metrics (session)."
+              ? "Scripted QC view over sample metrics for the current protein scope (re-runs when the filter or Downstream selection changes)."
               : `Session-defined QC view over sample metrics${colorByGroup ? ", colored by annotation group" : ""}.`}
           </p>
         </div>
@@ -101,17 +187,29 @@ export function UserDefinedPlot({
       </header>
 
       {spec.kind === "script" ? (
-        spec.chartSpec ? (
-          <ChartSpecView chartSpec={spec.chartSpec} />
-        ) : (
-          <p
-            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600"
-            role="status"
-          >
-            No chartSpec yet. Re-run the script from Script / Advanced, or have
-            an AI agent POST /api/custom-plot and register the result.
-          </p>
-        )
+        <>
+          {scriptStatus === "loading" ? (
+            <p className="mb-2 text-sm text-slate-600" role="status">
+              Updating script plot for current protein scope…
+            </p>
+          ) : null}
+          {scriptError ? (
+            <p className="mb-2 text-sm text-amber-950" role="alert">
+              {scriptError}
+            </p>
+          ) : null}
+          {liveChart ? (
+            <ChartSpecView chartSpec={liveChart} />
+          ) : scriptStatus === "loading" ? null : (
+            <p
+              className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600"
+              role="status"
+            >
+              No chartSpec yet. Re-run the script from Script / Advanced, or have
+              an AI agent POST /api/custom-plot and register the result.
+            </p>
+          )}
+        </>
       ) : null}
 
       {spec.kind === "scatter" && spec.xKey && spec.yKey ? (

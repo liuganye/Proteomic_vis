@@ -36,7 +36,8 @@ function normalizeChart(raw: unknown): ChartSpec {
 
 /**
  * Run a JS custom-plot snippet in a constrained Node vm context.
- * No require / process / fetch.
+ * No require / process / fetch. Source is executed via vm.Script (not
+ * string-spliced into a larger template). Assign `chart` or call `emit(...)`.
  */
 export function runJsCustomPlot(options: {
   source: string;
@@ -72,22 +73,17 @@ export function runJsCustomPlot(options: {
     codeGeneration: { strings: false, wasm: false },
   });
 
-  const wrapped = `
-    "use strict";
-    (function () {
-      ${source}
-      return (typeof chart !== "undefined" ? chart : undefined);
-    })();
-  `;
-
-  const result = vm.runInContext(wrapped, context, {
+  const script = new vm.Script(source, {
+    filename: "custom-plot.js",
+  });
+  script.runInContext(context, {
     timeout: timeoutMs,
     displayErrors: true,
   });
 
-  const chart = emitted ?? result ?? sandbox.chart;
+  const chart = emitted ?? sandbox.chart;
   if (chart == null) {
-    throw new Error("script must assign chart = {...}, return {...}, or call emit(...)");
+    throw new Error("script must assign chart = {...} or call emit(...)");
   }
   return normalizeChart(chart);
 }

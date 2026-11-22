@@ -137,43 +137,66 @@ test("parseScriptRegistration builds kind=script specs for AI inject", async () 
   assert.match(parsed.spec.id, /^user-/);
 });
 
-test("Python runner emits chartSpec and blocks imports", () => {
+function runPython(source) {
   const runner = path.join(root, "scripts/custom_plot_runner.py");
-  const good = spawnSync(
-    "python3",
-    [runner],
-    {
-      input: JSON.stringify({
-        samples,
-        inputs: {},
-        source: `
+  return spawnSync("python3", [runner], {
+    input: JSON.stringify({ samples, inputs: {}, source }),
+    encoding: "utf8",
+  });
+}
+
+test("Python runner emits chartSpec and blocks imports", () => {
+  const good = runPython(`
 data = [{"x": s["sample"], "y": s["missingPct"], "group": s["group"]} for s in samples]
 chart = {"type": "bar", "data": data, "xKey": "x", "yKey": "y", "seriesKey": "group"}
-`,
-      }),
-      encoding: "utf8",
-    },
-  );
+`);
   assert.equal(good.status, 0, good.stderr || good.stdout);
   const parsed = JSON.parse(good.stdout);
   assert.equal(parsed.ok, true);
   assert.equal(parsed.chartSpec.type, "bar");
   assert.equal(parsed.chartSpec.data.length, 2);
 
-  const blocked = spawnSync(
-    "python3",
-    [runner],
-    {
-      input: JSON.stringify({
-        samples,
-        source: "import os\nchart = {'type':'bar','data':[],'xKey':'x','yKey':'y'}",
-      }),
-      encoding: "utf8",
-    },
+  const blocked = runPython(
+    "import os\nchart = {'type':'bar','data':[],'xKey':'x','yKey':'y'}",
   );
   const blockedBody = JSON.parse(blocked.stdout);
   assert.equal(blockedBody.ok, false);
   assert.match(blockedBody.error, /import/i);
+});
+
+test("Python sandbox rejects open, eval, and dunder access", () => {
+  for (const source of [
+    "open('/etc/passwd')\nchart={'type':'bar','data':[],'xKey':'x','yKey':'y'}",
+    "eval('1+1')\nchart={'type':'bar','data':[],'xKey':'x','yKey':'y'}",
+    "chart=__builtins__",
+    "x=().__class__\nchart={'type':'bar','data':[],'xKey':'x','yKey':'y'}",
+  ]) {
+    const result = runPython(source);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.ok, false, source);
+    assert.match(body.error, /not allowed|import|dunder|open|eval/i, source);
+  }
+});
+
+test("isChartSpec and registration reject oversized chartSpec.data", async () => {
+  const lib = await loadScriptLib();
+  const huge = {
+    type: "bar",
+    data: Array.from({ length: lib.SCRIPT_LIMITS.maxDataRows + 1 }, (_, i) => ({
+      x: i,
+      y: i,
+    })),
+    xKey: "x",
+    yKey: "y",
+  };
+  assert.equal(lib.isChartSpec(huge), false);
+  const parsed = lib.parseScriptRegistration({
+    title: "too big",
+    language: "python",
+    source: "chart = {}",
+    chartSpec: huge,
+  });
+  assert.equal("error" in parsed, true);
 });
 
 test("Python example scripts from repo produce charts", async () => {

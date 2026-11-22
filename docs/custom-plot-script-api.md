@@ -5,9 +5,24 @@ Stable contract for **QC → Custom → Script / Advanced**. Humans author scrip
 ## Architecture
 
 - Scripts run against **sample-level summary rows** only (missingness %, median log₁₀ MaxLFQ, n detected, Q1/Q3, sample, group) — never the full protein TSV.
-- Primary language: **Python** via `POST /api/custom-plot` (Node route → constrained `python3` subprocess).
-- Optional **JS** snippets run in the same API with Node `vm` (no `require`, no FS/network).
+- Primary language: **Python** via `POST /api/custom-plot` (Node route → constrained `python3` subprocess with a **minimal env allowlist** — not full `process.env`).
+- Optional **JS** snippets run in the same API with Node `vm.Script` (no `require` / `process` / `fetch`; source is not string-spliced into a larger template).
 - Scripts must emit a **chartSpec** the UI renders with Recharts.
+- Session script plots **re-run** against the current scoped sample rows whenever the QC protein filter or Downstream selection changes.
+
+## Access control (exposure model)
+
+| Environment | Default | How to open / harden |
+| --- | --- | --- |
+| Development (`NODE_ENV !== production`) | Open | Set `CUSTOM_PLOT_REQUIRE_SECRET=1` + `CUSTOM_PLOT_API_SECRET` to require `x-custom-plot-secret` |
+| Production | **Disabled** until configured | Set `CUSTOM_PLOT_API_SECRET` (recommended) **or** explicitly `CUSTOM_PLOT_ALLOW_UNAUTHENTICATED=1` |
+
+When a secret is configured:
+
+- Non-same-origin / AI callers must send header `x-custom-plot-secret: <secret>`.
+- Same-origin browser UI (`Sec-Fetch-Site: same-origin`) may call without embedding the secret in client JS (unless `CUSTOM_PLOT_REQUIRE_SECRET=1`).
+
+Do not publish the app network-reachable with `CUSTOM_PLOT_ALLOW_UNAUTHENTICATED=1` unless you accept arbitrary script execution on that host.
 
 ## Sample row shape (`inputs.samples`)
 
@@ -54,7 +69,7 @@ Success response:
 }
 ```
 
-Failure: `{ "ok": false, "error": "..." }` (HTTP 400/408/500 as appropriate).
+Failure: `{ "ok": false, "error": "..." }` (HTTP 400/401/408/503 as appropriate). Error strings are scrubbed (no absolute paths / raw stderr dumps).
 
 ### Python script contract
 
@@ -84,7 +99,7 @@ chart = {
 
 ### JS script contract
 
-Same `samples` / `inputs` bindings. Assign `chart = { ... }` or `return { ... }`.
+Same `samples` / `inputs` bindings. Assign `chart = { ... }` or call `emit(...)`.
 
 ## Session registration (UI / AI inject)
 
@@ -104,7 +119,7 @@ window.dispatchEvent(new CustomEvent("proteomics:register-custom-plot", {
 }));
 ```
 
-Or pass a full `UserCustomPlotSpec` with `kind: "script"`.
+Or pass a full `UserCustomPlotSpec` with `kind: "script"`. `chartSpec.data` must be ≤ 2000 rows (same as the run API).
 
 TypeScript helpers: `src/lib/custom-plot-script.ts` (`parseScriptRegistration`, example sources).
 
@@ -115,8 +130,7 @@ QC conventional + custom/script plots honor AppShell protein scope:
 1. **Feature filter** — discovered from Downstream-visible annotations (`src/lib/qc-protein-filter.ts`): GO aspect/term (demo map), gene symbol presence, protein probability buckets, default volcano DE call.
 2. **Downstream selection** — volcano clicks, results-table toggles, and GO term bars set `selectedProteinIds`; clearing selection refreshes QC to the broader scope.
 3. When both are active, QC uses the **intersection**. Empty scope shows an explicit empty state without breaking upload/mock load.
-
-Scripts still receive **sample-level** rows computed on the scoped protein set.
+4. **Script plots** re-run via `POST /api/custom-plot` on the scoped sample rows whenever that scope changes, so the chart matches the filter bar.
 
 ## Limits (sandbox)
 
@@ -124,9 +138,10 @@ Scripts still receive **sample-level** rows computed on the scoped protein set.
 | --- | --- |
 | Source length | 12_000 chars |
 | Samples rows | 500 |
+| chartSpec.data rows | 2_000 |
 | Timeout | 3 s |
-| Python | No `open` / `import` / `eval` / `exec` / `__` dunders; no network/FS APIs exposed |
-| JS (`vm`) | No `require` / `process` / `fetch`; frozen prototype context |
+| Python | No `open` / `import` / `eval` / `exec` / `__` dunders; minimal child env (`PATH`/`LANG`/`HOME`/… only) |
+| JS (`vm`) | No `require` / `process` / `fetch`; `vm.Script` + timeout; not a full OS sandbox |
 | Persistence | Session UI only (same as simple custom plots); cleared with dataset Clear |
 
 ## Examples

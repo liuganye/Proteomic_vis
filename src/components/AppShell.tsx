@@ -99,6 +99,14 @@ export function AppShell() {
     setUserCustomPlots((previous) => previous.filter((p) => p.id !== id));
     setQcFocus((current) => (current === id ? null : current));
   };
+  const updateUserPlot = (
+    id: string,
+    patch: Pick<UserCustomPlotSpec, "chartSpec">,
+  ) => {
+    setUserCustomPlots((previous) =>
+      previous.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    );
+  };
 
   return (
     <div className="proteomics-app">
@@ -237,6 +245,7 @@ export function AppShell() {
                   userCustomPlots={userCustomPlots}
                   onAddUserPlot={addUserPlot}
                   onRemoveUserPlot={removeUserPlot}
+                  onUpdateUserPlot={updateUserPlot}
                   selectedSamples={linkedSamples}
                   onSelectSamples={setSelectedSamples}
                   selectedProteinIds={selectedProteinIds}

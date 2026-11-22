@@ -53,6 +53,7 @@ export function isChartSpec(value: unknown): value is ChartSpec {
   const v = value as Record<string, unknown>;
   if (!ALLOWED_CHART_TYPES.includes(v.type as ChartSpecType)) return false;
   if (!Array.isArray(v.data)) return false;
+  if (v.data.length > SCRIPT_LIMITS.maxDataRows) return false;
   if (typeof v.xKey !== "string" || !v.xKey) return false;
   if (typeof v.yKey !== "string" || !v.yKey) return false;
   return true;

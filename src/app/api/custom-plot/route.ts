@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  checkCustomPlotApiAccess,
+  publicScriptError,
+} from "@/lib/custom-plot-api-access";
 import { runJsCustomPlot } from "@/lib/custom-plot-js-runner";
 import { runPythonCustomPlot } from "@/lib/custom-plot-python-runner";
 import { validateRunRequest } from "@/lib/custom-plot-script";
@@ -12,6 +16,14 @@ export const dynamic = "force-dynamic";
  * Contract: docs/custom-plot-script-api.md
  */
 export async function POST(request: Request) {
+  const access = checkCustomPlotApiAccess(request);
+  if (!access.ok) {
+    return NextResponse.json(
+      { ok: false, error: access.error },
+      { status: access.status },
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -48,7 +60,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, chartSpec });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = publicScriptError(err);
     const timedOut = /timed out/i.test(message);
     return NextResponse.json(
       { ok: false, error: message },
@@ -57,11 +69,13 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const access = checkCustomPlotApiAccess(request);
   return NextResponse.json({
     service: "custom-plot",
     languages: ["python", "js"],
     docs: "/docs/custom-plot-script-api.md",
     registerEvent: "proteomics:register-custom-plot",
+    access: access.ok ? "allowed" : "denied",
   });
 }
