@@ -2,13 +2,13 @@
  * Compact UniProt accession → gene symbol aliases for client-side GO enrichment.
  *
  * Built from FragPipe-style rows whose Gene symbols already exist in
- * `GO_DEMO_GENE_TERMS` (supplementary / raw combined_protein.tsv). This is NOT
- * a full UniProt or GOA dump — only accessions needed so uploads that lack a
- * usable Gene column (or put UniProt IDs in Gene) can still resolve to the
- * bundled demo GO map.
+ * `GO_DEMO_GENE_TERMS` and whose Organism is Homo sapiens (supplementary /
+ * raw combined_protein.tsv). Non-human ortholog accessions (yeast, E. coli,
+ * horse, bovine, …) are intentionally omitted so they do not enrich under
+ * human GO symbols. This is NOT a full UniProt or GOA dump.
  *
- * Limits: ~84 accessions covering the curated demo gene set that
- * appear in the shipped sample table. Novel accessions outside this list will
+ * Limits: ~73 human accessions covering the curated demo gene set
+ * that appear in the shipped sample table. Novel accessions outside this list
  * remain unmapped; use a proper GO tool for production enrichment.
  */
 
@@ -18,15 +18,11 @@ export const GO_UNIPROT_TO_GENE: Record<string, string> = {
   O43683: "BUB1",
   O75533: "SF3B1",
   O75874: "IDH1",
-  P00004: "CYCS",
   P00338: "LDHA",
   P00441: "SOD1",
-  P00445: "SOD1",
   P00519: "ABL1",
-  P00924: "ENO1",
   P01112: "HRAS",
   P02545: "LMNA",
-  P02769: "ALB",
   P04040: "CAT",
   P04083: "ANXA1",
   P04406: "GAPDH",
@@ -43,7 +39,6 @@ export const GO_UNIPROT_TO_GENE: Record<string, string> = {
   P09211: "GSTP1",
   P09651: "HNRNPA1",
   P09874: "PARP1",
-  P0AC41: "SDHA",
   P0DMV8: "HSPA1A",
   P10599: "TXN",
   P11021: "HSPA5",
@@ -53,21 +48,16 @@ export const GO_UNIPROT_TO_GENE: Record<string, string> = {
   P13073: "COX4I1",
   P13639: "EEF2",
   P14618: "PKM",
-  P15442: "GCN2",
   P16220: "CREB1",
   P19338: "NCL",
   P19838: "NFKB1",
   P20700: "LMNB1",
-  P22133: "MDH2",
   P23443: "RPS6KB1",
   P24941: "CDK2",
   P25705: "ATP5F1A",
-  P26321: "RPL5",
   P27797: "CALR",
   P27824: "CANX",
   P28482: "MAPK1",
-  P28834: "IDH1",
-  P29469: "MCM2",
   P30101: "PDIA3",
   P31040: "SDHA",
   P31749: "AKT1",
@@ -80,7 +70,6 @@ export const GO_UNIPROT_TO_GENE: Record<string, string> = {
   P42574: "CASP3",
   P46777: "RPL5",
   P49736: "MCM2",
-  P52643: "LDHA",
   P53350: "PLK1",
   P55211: "CASP9",
   P60709: "ACTB",

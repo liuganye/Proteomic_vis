@@ -157,14 +157,17 @@ test("resolveGoGene prefers Gene symbol then UniProt alias", () => {
   const byGene = go.resolveGoGene({ gene: "sod1", proteinId: "P00441" });
   assert.equal(byGene.key, "SOD1");
   assert.equal(byGene.source, "gene");
+  assert.equal(byGene.column, "Gene");
 
   const byAcc = go.resolveGoGene({ gene: "", proteinId: "P00441-1" });
   assert.equal(byAcc.key, "SOD1");
   assert.equal(byAcc.source, "uniprot");
+  assert.equal(byAcc.column, "Protein ID");
 
   const geneIsAcc = go.resolveGoGene({ gene: "P00441", proteinId: "P00441" });
   assert.equal(geneIsAcc.key, "SOD1");
   assert.equal(geneIsAcc.source, "uniprot");
+  assert.equal(geneIsAcc.column, "Gene");
 
   const multi = go.resolveGoGene({
     gene: "UNKNOWN;SOD1",
@@ -172,6 +175,13 @@ test("resolveGoGene prefers Gene symbol then UniProt alias", () => {
   });
   assert.equal(multi.key, "SOD1");
   assert.equal(multi.source, "gene");
+  assert.equal(multi.column, "Gene");
+});
+
+test("splitGeneCandidates keeps comma-in-name symbols like DUR1,2", () => {
+  assert.deepEqual(go.splitGeneCandidates("DUR1,2"), ["DUR1,2"]);
+  assert.deepEqual(go.splitGeneCandidates("SOD1;GAPDH"), ["SOD1", "GAPDH"]);
+  assert.deepEqual(go.splitGeneCandidates("SOD1, GAPDH"), ["SOD1", "GAPDH"]);
 });
 
 test("real-upload-shaped UniProt-only list still enriches", () => {
@@ -185,11 +195,11 @@ test("real-upload-shaped UniProt-only list still enriches", () => {
     point({ proteinId: "P99999", gene: "", significant: true, direction: "up" }), // CYCS
     point({ proteinId: "A0A0B4J2F0", gene: "", significant: true, direction: "up" }), // unmapped
     point({
-      proteinId: "sp|P00924|ENOA_YEAST",
+      proteinId: "sp|P06733|ENOA_HUMAN",
       gene: "",
       significant: true,
       direction: "up",
-    }), // ENO1 via pipe
+    }), // human ENO1 via pipe (same gene as bare P06733 — dedup)
   ];
 
   const result = go.enrichGoTerms(background, {
@@ -207,6 +217,62 @@ test("real-upload-shaped UniProt-only list still enriches", () => {
   assert.equal(result.idColumnUsed, "Protein ID");
   assert.ok(result.resolvedViaUniprot >= 3);
   assert.ok(result.unmappedForeground.includes("A0A0B4J2F0"));
+});
+
+test("accession held in Gene column reports idColumnUsed Gene", () => {
+  // stats.ts empty-Gene path copies Protein ID into gene — still a Gene-field lookup
+  const points = [
+    point({ proteinId: "P00441", gene: "P00441", significant: true }),
+    point({ proteinId: "P00338", gene: "P00338", significant: true }),
+    point({ proteinId: "P06733", gene: "P06733", significant: true }),
+    point({ proteinId: "P04406", gene: "P04406", significant: false, direction: "ns", log2fc: 0.1, adjP: 0.9 }),
+    point({ proteinId: "P07437", gene: "P07437", significant: false, direction: "ns", log2fc: 0.1, adjP: 0.9 }),
+  ];
+  const result = go.enrichGoTerms(points, {
+    aspect: "all",
+    direction: "significant",
+    topN: 10,
+    minHits: 2,
+  });
+  assert.ok(result.annotatedForeground >= 3);
+  assert.equal(result.idColumnUsed, "Gene");
+  assert.equal(result.resolvedViaUniprot, result.annotatedForeground);
+});
+
+test("via-UniProt counter is unique FG genes after dedup", () => {
+  const points = [
+    point({ proteinId: "P00441", gene: "", significant: true }),
+    point({ proteinId: "P00441-2", gene: "", significant: true }), // same SOD1
+    point({ proteinId: "sp|P00441|SODC_HUMAN", gene: "", significant: true }),
+    point({ proteinId: "P00338", gene: "", significant: true }),
+    point({ proteinId: "P06733", gene: "", significant: true }),
+    point({ proteinId: "P04406", gene: "GAPDH", significant: false, direction: "ns", log2fc: 0.1, adjP: 0.9 }),
+    point({ proteinId: "P07437", gene: "TUBB", significant: false, direction: "ns", log2fc: 0.1, adjP: 0.9 }),
+  ];
+  const result = go.enrichGoTerms(points, {
+    aspect: "all",
+    direction: "significant",
+    topN: 10,
+    minHits: 2,
+  });
+  assert.equal(result.annotatedForeground, 3); // SOD1, LDHA, ENO1
+  assert.equal(result.resolvedViaUniprot, 3); // not 5 row-level hits
+  assert.equal(result.idColumnUsed, "Protein ID");
+});
+
+test("non-human UniProt accessions do not alias into human GO symbols", () => {
+  const yeast = go.resolveGoGene({ gene: "", proteinId: "P00924" });
+  assert.equal(yeast.key, "");
+  assert.equal(yeast.source, "unresolved");
+  const ecoli = go.resolveGoGene({ gene: "", proteinId: "P52643" });
+  assert.equal(ecoli.key, "");
+  const horse = go.resolveGoGene({ gene: "", proteinId: "P00004" });
+  assert.equal(horse.key, "");
+  const bovin = go.resolveGoGene({ gene: "", proteinId: "P02769" });
+  assert.equal(bovin.key, "");
+  // Human counterparts still resolve
+  assert.equal(go.resolveGoGene({ gene: "", proteinId: "P06733" }).key, "ENO1");
+  assert.equal(go.resolveGoGene({ gene: "", proteinId: "P99999" }).key, "CYCS");
 });
 
 test("real-upload-shaped mixed Gene + UniProt produces chart metadata", () => {

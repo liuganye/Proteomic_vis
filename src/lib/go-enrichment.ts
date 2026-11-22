@@ -14,6 +14,9 @@ export type GoDirectionFilter = "significant" | "up" | "down";
 /** How a volcano row was matched to the bundled GO gene map. */
 export type GoIdSource = "gene" | "uniprot" | "unresolved";
 
+/** FragPipe-style field that supplied the matched ID. */
+export type GoIdColumn = "Gene" | "Protein ID";
+
 export interface GoEnrichmentTerm {
   id: string;
   name: string;
@@ -79,9 +82,13 @@ export function stripIsoformSuffix(accession: string): string {
   return accession.replace(/-\d+$/, "");
 }
 
+const UNIPROT_ACC_RE =
+  /([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-\d+)?/i;
+
 /**
  * Extract a UniProt accession from FragPipe Protein ID / Protein fields.
- * Accepts bare accessions, isoform suffixes, and `sp|ACC|NAME` / `tr|ACC|NAME`.
+ * Accepts bare accessions, isoform suffixes, `sp|ACC|NAME` / `tr|ACC|NAME`,
+ * and first accession in semicolon-grouped IDs (`P00441;Q9Y6K9`).
  */
 export function extractUniprotAccession(raw: string): string | null {
   const s = raw.trim();
@@ -93,22 +100,47 @@ export function extractUniprotAccession(raw: string): string | null {
     /^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-\d+)?$/i,
   );
   if (bare?.[1]) return stripIsoformSuffix(normalizeId(bare[1]));
+  // First accession in a multi-ID cell (e.g. P00441;Q9Y6K9)
+  const first = s.split(/[;,\s|/]+/).find((part) => UNIPROT_ACC_RE.test(part));
+  if (first) {
+    const m = first.match(UNIPROT_ACC_RE);
+    if (m?.[1]) return stripIsoformSuffix(normalizeId(m[1]));
+  }
   return null;
 }
 
-/** Split FragPipe multi-gene cells (`GENEA;GENEB` / commas / whitespace). */
+/**
+ * Split FragPipe multi-gene cells.
+ * Prefer `;` / whitespace / `|` separators. Commas only split when both sides
+ * look like gene symbols (avoids breaking rare names like `DUR1,2`).
+ */
 export function splitGeneCandidates(raw: string): string[] {
   if (!raw?.trim()) return [];
-  return raw
-    .split(/[;,\s|/]+/)
-    .map((g) => normalizeId(g))
-    .filter(Boolean);
+  const looksLikeSymbol = (s: string) => /^[A-Za-z][A-Za-z0-9]*$/.test(s);
+  // Comma+whitespace is a list separator; bare commas inside tokens (DUR1,2) stay.
+  const normalized = raw.replace(/,\s+/g, ";");
+  const parts: string[] = [];
+  for (const chunk of normalized.split(/[;\s|/]+/)) {
+    const t = chunk.trim();
+    if (!t) continue;
+    if (t.includes(",")) {
+      const sides = t.split(",").map((x) => x.trim()).filter(Boolean);
+      if (sides.length >= 2 && sides.every(looksLikeSymbol)) {
+        parts.push(...sides);
+        continue;
+      }
+    }
+    parts.push(t);
+  }
+  return parts.map((g) => normalizeId(g)).filter(Boolean);
 }
 
 export interface GoGeneResolve {
   /** Uppercase gene symbol key for GO_DEMO_GENE_TERMS (empty if unresolved). */
   key: string;
   source: GoIdSource;
+  /** Which FragPipe field supplied the matched ID (null when unresolved). */
+  column: GoIdColumn | null;
   /** Display / diagnostics label before resolution. */
   label: string;
 }
@@ -130,21 +162,30 @@ export function resolveGoGene(
 
   const hasTerms = (key: string): boolean => Boolean(geneTerms[key]?.length);
 
-  const trySymbol = (sym: string): GoGeneResolve | null => {
+  const trySymbol = (
+    sym: string,
+    column: GoIdColumn,
+  ): GoGeneResolve | null => {
     if (!sym) return null;
-    if (hasTerms(sym)) return { key: sym, source: "gene", label: sym };
+    if (hasTerms(sym)) return { key: sym, source: "gene", column, label: sym };
     return null;
   };
 
-  const tryUniprot = (raw: string, label: string): GoGeneResolve | null => {
+  const tryUniprot = (
+    raw: string,
+    label: string,
+    column: GoIdColumn,
+  ): GoGeneResolve | null => {
     const acc = extractUniprotAccession(raw);
     if (!acc) return null;
     const gene = uniprotToGene[acc];
     if (gene && hasTerms(gene)) {
-      return { key: gene, source: "uniprot", label: label || acc };
+      return { key: gene, source: "uniprot", column, label: label || acc };
     }
     // Direct accession key in geneTerms (rare; supports test overrides)
-    if (hasTerms(acc)) return { key: acc, source: "uniprot", label: label || acc };
+    if (hasTerms(acc)) {
+      return { key: acc, source: "uniprot", column, label: label || acc };
+    }
     return null;
   };
 
@@ -153,25 +194,29 @@ export function resolveGoGene(
 
   // 1) Gene column candidates (symbols first)
   for (const cand of splitGeneCandidates(geneRaw)) {
-    const hit = trySymbol(cand);
+    const hit = trySymbol(cand, "Gene");
     if (hit) return hit;
   }
 
   // 2) Gene column may itself be a UniProt accession (empty-Gene path sets gene=proteinId)
   for (const cand of splitGeneCandidates(geneRaw)) {
-    const hit = tryUniprot(cand, cand);
+    const hit = tryUniprot(cand, cand, "Gene");
     if (hit) return hit;
   }
   if (geneRaw) {
-    const hit = tryUniprot(geneRaw, normalizeId(geneRaw));
+    const hit = tryUniprot(geneRaw, normalizeId(geneRaw), "Gene");
     if (hit) return hit;
   }
 
   // 3) Protein ID / Protein-style field
   if (proteinRaw) {
-    const asSymbol = trySymbol(normalizeId(proteinRaw));
+    const asSymbol = trySymbol(normalizeId(proteinRaw), "Protein ID");
     if (asSymbol) return asSymbol;
-    const hit = tryUniprot(proteinRaw, normalizeId(stripIsoformSuffix(proteinRaw)));
+    const hit = tryUniprot(
+      proteinRaw,
+      normalizeId(stripIsoformSuffix(proteinRaw)),
+      "Protein ID",
+    );
     if (hit) return hit;
   }
 
@@ -179,7 +224,7 @@ export function resolveGoGene(
     normalizeId(geneRaw) ||
     normalizeId(stripIsoformSuffix(proteinRaw)) ||
     "";
-  return { key: "", source: "unresolved", label };
+  return { key: "", source: "unresolved", column: null, label };
 }
 
 /** @deprecated Prefer resolveGoGene — kept for callers expecting a single string key. */
@@ -259,12 +304,12 @@ export function benjaminiHochberg(pValues: number[]): number[] {
 }
 
 function summarizeIdColumn(
-  geneHits: number,
-  uniprotHits: number,
+  geneColumnHits: number,
+  proteinColumnHits: number,
 ): GoEnrichmentResult["idColumnUsed"] {
-  if (geneHits > 0 && uniprotHits > 0) return "mixed";
-  if (geneHits > 0) return "Gene";
-  if (uniprotHits > 0) return "Protein ID";
+  if (geneColumnHits > 0 && proteinColumnHits > 0) return "mixed";
+  if (geneColumnHits > 0) return "Gene";
+  if (proteinColumnHits > 0) return "Protein ID";
   return "none";
 }
 
@@ -314,8 +359,11 @@ export function enrichGoTerms(
   const seenFg = new Set<string>();
   const unmappedForeground: string[] = [];
   const seenUnmapped = new Set<string>();
-  let fgGeneHits = 0;
-  let fgUniprotHits = 0;
+  /** Unique FG gene keys resolved from the Gene column (symbol or accession-in-Gene). */
+  let fgGeneColumnHits = 0;
+  /** Unique FG gene keys resolved from Protein ID. */
+  let fgProteinColumnHits = 0;
+  /** Unique FG gene keys that used UniProt→gene alias (any column). */
   let resolvedViaUniprot = 0;
 
   for (const p of fgPoints) {
@@ -328,15 +376,14 @@ export function enrichGoTerms(
       }
       continue;
     }
-    if (resolved.source === "gene") fgGeneHits += 1;
-    if (resolved.source === "uniprot") {
-      fgUniprotHits += 1;
-      resolvedViaUniprot += 1;
-    }
     if (!seenBg.has(resolved.key)) continue;
     if (seenFg.has(resolved.key)) continue;
     seenFg.add(resolved.key);
     foregroundKeys.push(resolved.key);
+    // Count after unique-gene dedup so footer stats match annotated FG size.
+    if (resolved.column === "Gene") fgGeneColumnHits += 1;
+    if (resolved.column === "Protein ID") fgProteinColumnHits += 1;
+    if (resolved.source === "uniprot") resolvedViaUniprot += 1;
   }
 
   const N = backgroundKeys.length;
@@ -416,7 +463,7 @@ export function enrichGoTerms(
     annotatedBackground: N,
     unmappedForeground,
     resolvedViaUniprot,
-    idColumnUsed: summarizeIdColumn(fgGeneHits, fgUniprotHits),
+    idColumnUsed: summarizeIdColumn(fgGeneColumnHits, fgProteinColumnHits),
     aspect,
     direction,
     ranking,
