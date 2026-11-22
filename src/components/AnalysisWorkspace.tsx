@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { addPanel, DEFAULT_LAYOUT, GRID_COLUMNS, GRID_GAP, GRID_ROW, panelDefinition, placePanel, readLayout, WORKSPACE_MODULES, type PanelLayout, type WorkspaceModuleId } from "@/lib/workspace-layout";
 
-const STORAGE_KEY = "proteomics.workspace.real.layout.v1";
-const FREE_STORAGE_KEY = "proteomics.workspace.real.free.v2";
+const STORAGE_KEY = "proteomics.workspace.real.layout.v3";
+const FREE_STORAGE_KEY = "proteomics.workspace.real.free.v3";
 type SnapMode = "grid" | "free";
 type FreeRect = { xFrac: number; top: number; wFrac: number; height: number };
 type FreeMap = Partial<Record<WorkspaceModuleId, FreeRect>>;
@@ -138,7 +138,7 @@ export function AnalysisWorkspace({ context, renderPanel, reveal }: {
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState("");
   const [width, setWidth] = useState(0);
-  const [snapMode, setSnapMode] = useState<SnapMode>("free");
+  const [snapMode, setSnapMode] = useState<SnapMode>("grid");
   const [freeRects, setFreeRects] = useState<FreeMap>({});
   const [zOrder, setZOrder] = useState<WorkspaceModuleId[]>([]);
   const [soloPanel, setSoloPanel] = useState<WorkspaceModuleId | null>(null);

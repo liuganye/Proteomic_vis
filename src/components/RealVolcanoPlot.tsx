@@ -18,15 +18,12 @@ import {
 } from "@/lib/visualization";
 import type { WorkspaceModuleId } from "@/lib/workspace-layout";
 import { VolcanoBrushInputs } from "./VolcanoBrushInputs";
+import { VOLCANO_COLORS } from "@/lib/chart-palette";
 
 type Point = { protein_id: string; gene: string | null; organism?: string; log2_fc: number; p_value?: number; adj_p: number };
 type AbundancePoint = { sample_id: string; display_group: string; log2_intensity: number | null };
 
-const DIRECTION_COLORS = {
-  up: "#0f766e",
-  down: "#b45309",
-  ns: "#94a3b8",
-} as const;
+const DIRECTION_COLORS = VOLCANO_COLORS;
 
 export function RealVolcanoPlot({
   points,

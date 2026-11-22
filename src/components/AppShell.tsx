@@ -12,12 +12,11 @@ import {
   type QcProteinFilter,
 } from "@/lib/qc-protein-filter";
 import type {
-  DownstreamModuleId,
   QcPlotId,
   SectionId,
   UserCustomPlotSpec,
 } from "@/lib/types";
-import { DownstreamPanel } from "./downstream/DownstreamPanel";
+import { DownstreamMultiples } from "./downstream/DownstreamMultiples";
 import { FileUploadPanel } from "./FileUploadPanel";
 import { QcPanel } from "./qc/QcPanel";
 import { RealExplore } from "./RealExplore";
@@ -42,7 +41,6 @@ export function AppShell() {
   const [section, setSection] = useState<SectionId>("qc");
   const [qcFocus, setQcFocus] = useState<QcPlotId | null>(null);
   const [qcFocusToken, setQcFocusToken] = useState(0);
-  const [dsModule, setDsModule] = useState<DownstreamModuleId>("volcano");
   const [userCustomPlots, setUserCustomPlots] = useState<UserCustomPlotSpec[]>([]);
 
   useEffect(() => {
@@ -58,7 +56,6 @@ export function AppShell() {
     setProteinFocus("O00148");
   }, [state.dataset]);
 
-  // Closed-loop AI / host registration without editing React.
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail;
@@ -107,6 +104,16 @@ export function AppShell() {
       previous.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     );
   };
+
+  const dataPortal = (
+    <FileUploadPanel
+      state={state}
+      onLoadMock={loadMock}
+      onLoadReal={loadReal}
+      onLoadFiles={loadFiles}
+      onClear={handleClear}
+    />
+  );
 
   return (
     <div className="proteomics-app">
@@ -216,21 +223,14 @@ export function AppShell() {
               <div>
                 <h1>Sample quality overview</h1>
                 <p>
-                  Compare coverage, intensity and similarity. Selecting a sample
-                  highlights its evidence downstream. Protein filters and
-                  Downstream selections scope QC plots.
+                  Compare coverage, intensity and similarity in a simultaneous
+                  grid. Selecting a sample highlights its evidence downstream.
                 </p>
               </div>
             </div>
-            <FileUploadPanel
-              state={state}
-              onLoadMock={loadMock}
-              onLoadReal={loadReal}
-              onLoadFiles={loadFiles}
-              onClear={handleClear}
-            />
+            {dataPortal}
             {state.status === "ready" && state.dataset ? (
-              <div className="mt-6">
+              <div className="mt-5">
                 {real && (
                   <p className="mb-4 text-sm text-slate-600">
                     Focused protein in workspace: <strong>{proteinFocus}</strong>
@@ -258,7 +258,7 @@ export function AppShell() {
               <p className="mt-6 rounded border border-slate-200 bg-white p-6 text-sm">
                 {state.status === "loading"
                   ? "Preparing sample quality views…"
-                  : "Load a dataset above to inspect sample quality."}
+                  : "Load a dataset in the data portal above to inspect sample quality."}
               </p>
             )}
           </main>
@@ -283,47 +283,42 @@ export function AppShell() {
                 <div>
                   <h1>Downstream workspace</h1>
                   <p>
-                    The linked workspace uses the real dataset and its packaged
-                    protein evidence. Mock/upload Downstream selections sync
-                    back to QC protein scope.
+                    Use the unified data portal for mock, real HYE, or uploaded
+                    FragPipe TSVs. Real HYE opens the seven-module workspace;
+                    mock and uploads show volcano, results, and GO together.
                   </p>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <p>
-                  {state.status === "loading"
-                    ? "Loading the real dataset…"
-                    : state.status === "error"
-                      ? state.error
-                      : "Load the real dataset to use the seven-module workspace. Mock and uploaded results remain separate below."}
-                </p>
-                <button
-                  type="button"
-                  disabled={state.status === "loading"}
-                  onClick={() => void loadReal()}
-                  className="mt-3 rounded bg-teal-800 px-4 py-2 text-sm text-white disabled:opacity-50"
-                >
-                  Load real dataset
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSection("qc")}
-                  className="ml-3 mt-3 rounded border px-4 py-2 text-sm"
-                >
-                  Return to QC
-                </button>
-              </div>
+              {state.status !== "ready" && (
+                <FileUploadPanel
+                  state={state}
+                  onLoadMock={loadMock}
+                  onLoadReal={loadReal}
+                  onLoadFiles={loadFiles}
+                  onClear={handleClear}
+                  compact
+                />
+              )}
               {state.status === "ready" && state.dataset && (
-                <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
-                  <h2 className="mb-2 text-lg font-semibold">
-                    {state.dataset.source === "mock"
-                      ? "Synthetic demo results"
-                      : "Uploaded results"}
-                  </h2>
-                  <p className="mb-4 text-sm text-slate-600">
-                    These results are separate from the real protein evidence
-                    workspace. Click volcano points, result rows, or GO term
-                    genes to select proteins for QC.
+                <section className="mt-2 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      {state.dataset.source === "mock"
+                        ? "Synthetic demo · Downstream multiples"
+                        : "Uploaded results · Downstream multiples"}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setSection("qc")}
+                      className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+                    >
+                      ← QC / data portal
+                    </button>
+                  </div>
+                  <p className="text-sm text-slate-600">
+                    Volcano, results table, and GO enrichment share one contrast
+                    and one screen. Click points, rows, or GO genes to select
+                    proteins for QC.
                     {selectedProteinIds.length > 0 ? (
                       <>
                         {" "}
@@ -341,30 +336,22 @@ export function AppShell() {
                       </>
                     ) : null}
                   </p>
-                  <div className="mb-4 flex gap-2">
-                    {(["volcano", "results", "go"] as const).map((id) => (
-                      <button
-                        type="button"
-                        key={id}
-                        aria-pressed={dsModule === id}
-                        className="rounded border px-3 py-2 text-sm aria-pressed:bg-teal-50"
-                        onClick={() => setDsModule(id)}
-                      >
-                        {id === "volcano"
-                          ? "Volcano"
-                          : id === "results"
-                            ? "Results table"
-                            : "GO enrichment"}
-                      </button>
-                    ))}
-                  </div>
-                  <DownstreamPanel
+                  <DownstreamMultiples
                     dataset={state.dataset}
-                    module={dsModule}
                     selectedProteinIds={selectedProteinIds}
                     onSelectProteins={setSelectedProteinIds}
                   />
                 </section>
+              )}
+              {state.status === "loading" && (
+                <p className="mt-4 text-sm text-slate-600" role="status">
+                  Loading dataset…
+                </p>
+              )}
+              {state.status === "error" && (
+                <p className="mt-4 text-sm text-red-800" role="alert">
+                  {state.error}
+                </p>
               )}
             </>
           )}

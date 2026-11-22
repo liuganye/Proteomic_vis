@@ -1,7 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoadState } from "@/lib/types";
+
+type PortalSource = "mock" | "real" | "upload";
+
+function sourceFromDataset(
+  dataset: NonNullable<LoadState["dataset"]> | undefined,
+): PortalSource | null {
+  if (!dataset) return null;
+  if (dataset.source === "mock") return "mock";
+  if (dataset.source === "real") return "real";
+  return "upload";
+}
 
 interface Props {
   state: LoadState;
@@ -9,6 +20,8 @@ interface Props {
   onLoadReal: () => void;
   onLoadFiles: (protein: File, annotation?: File | null) => void;
   onClear: () => void;
+  /** Compact strip for embedding above Downstream when no dataset is ready. */
+  compact?: boolean;
 }
 
 export function FileUploadPanel({
@@ -17,13 +30,40 @@ export function FileUploadPanel({
   onLoadReal,
   onLoadFiles,
   onClear,
+  compact = false,
 }: Props) {
   const proteinRef = useRef<HTMLInputElement>(null);
   const annRef = useRef<HTMLInputElement>(null);
   const [proteinFile, setProteinFile] = useState<File | null>(null);
   const [annFile, setAnnFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** User intent while idle/loading; synced from dataset when ready unless uploading. */
+  const [intent, setIntent] = useState<PortalSource>("upload");
+  /** Explicit Upload selection while mock/real data is still loaded — shows dropzone. */
+  const [uploadOverride, setUploadOverride] = useState(false);
   const loading = state.status === "loading";
+  const loaded = sourceFromDataset(state.dataset);
+  const source: PortalSource = uploadOverride
+    ? "upload"
+    : state.status === "ready" && loaded
+      ? loaded
+      : intent;
+
+  // Sync radio from loaded dataset; do not clobber an in-progress Upload override.
+  useEffect(() => {
+    if (state.status === "ready" && state.dataset) {
+      const next = sourceFromDataset(state.dataset);
+      if (!next) return;
+      if (uploadOverride && next !== "upload") return;
+      setUploadOverride(false);
+      setIntent(next);
+      return;
+    }
+    if (state.status === "idle") {
+      setUploadOverride(false);
+      setIntent("upload");
+    }
+  }, [state.status, state.dataset, uploadOverride]);
 
   const assignFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files);
@@ -41,115 +81,51 @@ export function FileUploadPanel({
       list.find((f) => f !== protein && /\.(tsv|txt)$/i.test(f.name));
     if (protein) setProteinFile(protein);
     if (annotation) setAnnFile(annotation);
+    setUploadOverride(true);
+    setIntent("upload");
   }, []);
 
   const parseNow = useCallback(() => {
     if (!proteinFile || loading) return;
+    setUploadOverride(false);
     onLoadFiles(proteinFile, annFile);
   }, [proteinFile, annFile, loading, onLoadFiles]);
 
+  const activateSource = (next: PortalSource) => {
+    if (next === "upload") {
+      setUploadOverride(true);
+      setIntent("upload");
+      return;
+    }
+    setUploadOverride(false);
+    setIntent(next);
+    if (next === "mock" && !loading) onLoadMock();
+    if (next === "real" && !loading) onLoadReal();
+  };
+
   return (
-    <section className="min-w-0 break-words rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">
-        Data input
-      </h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Upload FragPipe outputs or load built-in synthetic Group A / Group B data. Expects{" "}
-        <code className="rounded bg-slate-100 px-1 text-xs">
-          combined_protein.tsv
-        </code>{" "}
-        (MaxLFQ + optional adj. p / log2FC) and optional{" "}
-        <code className="rounded bg-slate-100 px-1 text-xs">
-          experiment_annotation.tsv
-        </code>
-        . Large tables parse in chunks so the UI stays responsive.
-      </p>
-
-      <div
-        className={`mt-4 rounded-lg border border-dashed px-3 py-3 transition ${
-          dragOver
-            ? "border-teal-600 bg-teal-50"
-            : "border-slate-300 bg-slate-50/60"
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          if (e.dataTransfer.files?.length) assignFiles(e.dataTransfer.files);
-        }}
-      >
-        <p className="text-xs text-slate-500">
-          Drop TSV files here, or choose below. Protein + annotation can be
-          dropped together.
-        </p>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="block min-w-0 text-sm">
-          <span className="mb-1 block font-medium text-slate-700">
-            combined_protein.tsv
-          </span>
-          <input
-            ref={proteinRef}
-            type="file"
-            accept=".tsv,.txt,text/tab-separated-values,text/plain"
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-teal-700 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-teal-800"
-            onChange={(e) => setProteinFile(e.target.files?.[0] ?? null)}
-            disabled={loading}
-          />
-          {proteinFile && (
-            <p className="mt-1 truncate text-xs text-slate-500">
-              {proteinFile.name} · {(proteinFile.size / (1024 * 1024)).toFixed(2)}{" "}
-              MB
+    <section
+      className={`data-portal min-w-0 break-words ${compact ? "data-portal--compact" : ""}`}
+      aria-labelledby="data-portal-heading"
+      data-testid="data-portal"
+    >
+      <div className="data-portal__header">
+        <div>
+          <h2 id="data-portal-heading" className="data-portal__title">
+            Data portal
+          </h2>
+          {!compact && (
+            <p className="data-portal__lede">
+              One place to load mock demo data, the packaged real FragPipe HYE
+              snapshot, or your own{" "}
+              <code>combined_protein.tsv</code>
+              {" "}(+ optional{" "}
+              <code>experiment_annotation.tsv</code>
+              ).
             </p>
           )}
-        </label>
-        <label className="block min-w-0 text-sm">
-          <span className="mb-1 block font-medium text-slate-700">
-            experiment_annotation.tsv{" "}
-            <span className="font-normal text-slate-400">(optional)</span>
-          </span>
-          <input
-            ref={annRef}
-            type="file"
-            accept=".tsv,.txt,text/tab-separated-values,text/plain"
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-            onChange={(e) => setAnnFile(e.target.files?.[0] ?? null)}
-            disabled={loading}
-          />
-          {annFile && (
-            <p className="mt-1 truncate text-xs text-slate-500">{annFile.name}</p>
-          )}
-        </label>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" disabled={loading} onClick={onLoadReal} className="rounded-md bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Load real dataset</button>
-        <button
-          type="button"
-          disabled={loading || !proteinFile}
-          onClick={parseNow}
-          className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {loading ? "Working…" : "Parse uploads"}
-        </button>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={(e) => {
-            e.preventDefault();
-            onLoadMock();
-          }}
-          className="rounded-md border border-teal-700 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-900 hover:bg-teal-100 disabled:opacity-50"
-          data-testid="load-mock-data"
-        >
-          {loading ? "Loading mock…" : "Load mock data"}
-        </button>
-        {state.status === "ready" && (
+        </div>
+        {state.status === "ready" && state.dataset && (
           <button
             type="button"
             onClick={() => {
@@ -157,36 +133,170 @@ export function FileUploadPanel({
               setAnnFile(null);
               if (proteinRef.current) proteinRef.current.value = "";
               if (annRef.current) annRef.current.value = "";
+              setUploadOverride(false);
+              setIntent("upload");
               onClear();
             }}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            className="data-portal__clear"
           >
             Clear
           </button>
         )}
       </div>
 
-      {state.status === "ready" && state.dataset?.source === "mock" && (
-        <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">
-          Synthetic demo · 120 proteins · Group A: 4 samples (A_1–A_4) · Group B: 3 samples (B_1–B_3).
-          These are illustrative values, not a subset of the real dataset. QC checks all seven samples;
-          neither group is a quality-control group. Group A vs Group B statistics are for demonstration only.
+      <div
+        className="data-portal__sources"
+        role="radiogroup"
+        aria-label="Dataset source"
+      >
+        {(
+          [
+            { id: "mock", label: "Mock demo", hint: "Synthetic Group A / B" },
+            { id: "real", label: "Real HYE", hint: "Packaged FragPipe snapshot" },
+            { id: "upload", label: "Upload TSV", hint: "Protein + annotation" },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            role="radio"
+            aria-checked={source === opt.id}
+            data-testid={`portal-source-${opt.id}`}
+            disabled={loading}
+            className={`data-portal__source ${source === opt.id ? "is-active" : ""}`}
+            onClick={() => activateSource(opt.id)}
+          >
+            <strong>{opt.label}</strong>
+            <span>{opt.hint}</span>
+          </button>
+        ))}
+      </div>
+
+      {source === "upload" && (
+        <div className="data-portal__upload" id="data-portal-upload">
+          <div
+            className={`data-portal__drop ${dragOver ? "is-over" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (e.dataTransfer.files?.length) assignFiles(e.dataTransfer.files);
+            }}
+          >
+            <p>
+              Drop FragPipe TSV files here, or choose below. Protein + annotation
+              can arrive together.
+            </p>
+          </div>
+
+          <div className="data-portal__files">
+            <label className="block min-w-0 text-sm">
+              <span className="mb-1 block font-medium text-[color:var(--portal-ink)]">
+                combined_protein.tsv
+              </span>
+              <input
+                ref={proteinRef}
+                type="file"
+                accept=".tsv,.txt,text/tab-separated-values,text/plain"
+                className="data-portal__file-input"
+                onChange={(e) => {
+                  setProteinFile(e.target.files?.[0] ?? null);
+                  setUploadOverride(true);
+                  setIntent("upload");
+                }}
+                disabled={loading}
+              />
+              {proteinFile && (
+                <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">
+                  {proteinFile.name} ·{" "}
+                  {(proteinFile.size / (1024 * 1024)).toFixed(2)} MB
+                </p>
+              )}
+            </label>
+            <label className="block min-w-0 text-sm">
+              <span className="mb-1 block font-medium text-[color:var(--portal-ink)]">
+                experiment_annotation.tsv{" "}
+                <span className="font-normal text-[color:var(--portal-muted)]">
+                  (optional)
+                </span>
+              </span>
+              <input
+                ref={annRef}
+                type="file"
+                accept=".tsv,.txt,text/tab-separated-values,text/plain"
+                className="data-portal__file-input data-portal__file-input--secondary"
+                onChange={(e) => {
+                  setAnnFile(e.target.files?.[0] ?? null);
+                  setUploadOverride(true);
+                  setIntent("upload");
+                }}
+                disabled={loading}
+              />
+              {annFile && (
+                <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">
+                  {annFile.name}
+                </p>
+              )}
+            </label>
+          </div>
+
+          <button
+            type="button"
+            disabled={loading || !proteinFile}
+            onClick={parseNow}
+            className="data-portal__parse"
+            data-testid="portal-parse-uploads"
+          >
+            {loading ? "Working…" : "Parse uploads"}
+          </button>
+        </div>
+      )}
+
+      {source === "upload" &&
+        uploadOverride &&
+        state.status === "ready" &&
+        state.dataset &&
+        state.dataset.source !== "upload" && (
+          <p className="data-portal__banner">
+            Current {state.dataset.source === "mock" ? "mock" : "Real HYE"}{" "}
+            dataset stays loaded until you Parse uploads (replaces it) or Clear.
+            Pick Mock or Real HYE above to switch without uploading.
+          </p>
+        )}
+
+      {source === "mock" && state.status === "ready" && state.dataset?.source === "mock" && (
+        <p className="data-portal__banner data-portal__banner--mock">
+          Synthetic demo · 120 proteins · Group A: 4 samples (A_1–A_4) · Group B:
+          3 samples (B_1–B_3). Illustrative values only — QC checks all seven
+          samples; Group A vs Group B statistics are for demonstration. Use Upload
+          TSV above to replace with your files.
         </p>
       )}
+
+      {source === "real" && state.status === "ready" && state.dataset?.source === "real" && (
+        <p className="data-portal__banner">
+          Real HYE FragPipe snapshot loaded. Use Mock or Upload TSV above to switch
+          source (Upload keeps this data until Parse or Clear).
+        </p>
+      )}
+
       {state.status === "idle" && (
-        <p className="mt-3 text-sm text-slate-500">
-          No data loaded yet. Use mock data for a quick demo, or upload your
-          FragPipe TSVs.
+        <p className="mt-3 text-sm text-[color:var(--portal-muted)]">
+          No data loaded yet. Pick Mock, Real HYE, or Upload TSV above.
         </p>
       )}
       {state.status === "loading" && (
         <div className="mt-3" role="status">
-          <p className="text-sm text-teal-800">
+          <p className="text-sm text-[color:var(--chart-accent-deep,#0a5c5f)]">
             {state.progress ?? "Parsing protein table…"}
           </p>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-track,#e8eef1)]">
             <div
-              className="h-full rounded-full bg-teal-700 transition-[width] duration-200"
+              className="h-full rounded-full bg-[color:var(--chart-accent,#0d7377)] transition-[width] duration-200"
               style={{
                 width: `${Math.round((state.progressFraction ?? 0.08) * 100)}%`,
               }}
@@ -204,34 +314,26 @@ export function FileUploadPanel({
       )}
       {state.status === "ready" && state.dataset && (
         <>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+          <dl className="data-portal__stats">
             <div>
-              <dt className="text-slate-500">Proteins</dt>
-              <dd className="font-semibold text-slate-900">
-                {state.dataset.proteins.length}
-              </dd>
+              <dt>Proteins</dt>
+              <dd>{state.dataset.proteins.length.toLocaleString()}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Samples</dt>
-              <dd className="font-semibold text-slate-900">
-                {state.dataset.samples.length}
-              </dd>
+              <dt>Samples</dt>
+              <dd>{state.dataset.samples.length}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Contrasts</dt>
-              <dd className="font-semibold text-slate-900">
-                {state.dataset.contrasts.length || "—"}
-              </dd>
+              <dt>Contrasts</dt>
+              <dd>{state.dataset.contrasts.length || "—"}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Source</dt>
-              <dd className="font-semibold text-slate-900">
-                {state.dataset.source}
-              </dd>
+              <dt>Source</dt>
+              <dd>{state.dataset.source}</dd>
             </div>
-            <div className="col-span-2 sm:col-span-4">
-              <dt className="text-slate-500">Files</dt>
-              <dd className="truncate text-slate-800">
+            <div className="data-portal__stats-files">
+              <dt>Files</dt>
+              <dd className="truncate">
                 {state.dataset.proteinFileName}
                 {state.dataset.annotationFileName
                   ? ` · ${state.dataset.annotationFileName}`
@@ -246,6 +348,18 @@ export function FileUploadPanel({
           )}
         </>
       )}
+      {/* Test hook only — not in the a11y tree */}
+      <button
+        type="button"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="load-mock-data"
+        disabled={loading}
+        onClick={() => activateSource("mock")}
+      >
+        Load mock data
+      </button>
     </section>
   );
 }

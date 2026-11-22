@@ -12,7 +12,27 @@ async function loadTs(path) {
   });
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
-const stats = await loadTs("../src/lib/stats.ts");
+/** Bundle local relative imports so data: URLs can load stats → chart-palette. */
+async function loadTsWithLocalDeps(entryPath, depPaths) {
+  const parts = [];
+  for (const dep of depPaths) {
+    const src = await readFile(new URL(dep, import.meta.url), "utf8");
+    parts.push(
+      ts.transpileModule(src, {
+        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
+      }).outputText.replace(/^\s*export\s+/gm, ""),
+    );
+  }
+  let entry = await readFile(new URL(entryPath, import.meta.url), "utf8");
+  entry = entry.replace(/import\s*\{[^}]*\}\s*from\s*["']\.\/[^"']+["'];?\s*/g, "");
+  parts.push(
+    ts.transpileModule(entry, {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
+    }).outputText,
+  );
+  return import(`data:text/javascript;base64,${Buffer.from(parts.join("\n")).toString("base64")}`);
+}
+const stats = await loadTsWithLocalDeps("../src/lib/stats.ts", ["../src/lib/chart-palette.ts"]);
 const vis = await loadTs("../src/lib/visualization.ts");
 const qcPlot = await loadTs("../src/lib/qc-plot.ts");
 const dataset = values => ({ samples: ["sample"], annotation: [], proteins: values.map(v => ({ maxlfq: { sample: v } })) });
