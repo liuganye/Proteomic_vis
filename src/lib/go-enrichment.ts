@@ -4,11 +4,18 @@ import {
   type GoAspect,
   type GoTermDef,
 } from "@/data/go-demo-mapping";
+import { GO_UNIPROT_TO_GENE } from "@/data/go-uniprot-to-gene";
 import type { VolcanoPoint } from "./types";
 
 export type { GoAspect, GoTermDef };
 
 export type GoDirectionFilter = "significant" | "up" | "down";
+
+/** How a volcano row was matched to the bundled GO gene map. */
+export type GoIdSource = "gene" | "uniprot" | "unresolved";
+
+/** FragPipe-style field that supplied the matched ID. */
+export type GoIdColumn = "Gene" | "Protein ID";
 
 export interface GoEnrichmentTerm {
   id: string;
@@ -36,6 +43,13 @@ export interface GoEnrichmentResult {
   annotatedForeground: number;
   annotatedBackground: number;
   unmappedForeground: string[];
+  /** Rows resolved via UniProt accession → gene alias (not Gene column). */
+  resolvedViaUniprot: number;
+  /**
+   * Which FragPipe-style field supplied most mapped foreground IDs.
+   * `mixed` when both Gene symbols and UniProt aliases contributed.
+   */
+  idColumnUsed: "Gene" | "Protein ID" | "mixed" | "none";
   aspect: GoAspect | "all";
   direction: GoDirectionFilter;
   ranking: "negLog10AdjP" | "enrichment";
@@ -55,17 +69,169 @@ export interface GoEnrichmentOptions {
    */
   geneTerms?: Record<string, string[]>;
   termCatalog?: GoTermDef[];
+  /** Optional UniProt accession → gene symbol map (uppercase keys). */
+  uniprotToGene?: Record<string, string>;
 }
 
-function normalizeGene(raw: string): string {
+function normalizeId(raw: string): string {
   return raw.trim().toUpperCase();
 }
 
-/** Resolve a volcano / protein row to a mapping key (gene preferred). */
-export function geneKeyFromPoint(p: Pick<VolcanoPoint, "gene" | "proteinId">): string {
-  if (p.gene?.trim()) return normalizeGene(p.gene);
-  // UniProt-style IDs or FragPipe Protein ID — try as-is (demo map is gene-keyed)
-  return normalizeGene(p.proteinId);
+/** Strip UniProt isoform suffix (P12345-2 → P12345). */
+export function stripIsoformSuffix(accession: string): string {
+  return accession.replace(/-\d+$/, "");
+}
+
+const UNIPROT_ACC_RE =
+  /([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-\d+)?/i;
+
+/**
+ * Extract a UniProt accession from FragPipe Protein ID / Protein fields.
+ * Accepts bare accessions, isoform suffixes, `sp|ACC|NAME` / `tr|ACC|NAME`,
+ * and first accession in semicolon-grouped IDs (`P00441;Q9Y6K9`).
+ */
+export function extractUniprotAccession(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const pipe = s.match(/^(?:sp|tr)\|([A-Za-z0-9]+)(?:\||$)/i);
+  if (pipe?.[1]) return stripIsoformSuffix(normalizeId(pipe[1]));
+  // Bare accession (with optional isoform)
+  const bare = s.match(
+    /^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-\d+)?$/i,
+  );
+  if (bare?.[1]) return stripIsoformSuffix(normalizeId(bare[1]));
+  // First accession in a multi-ID cell (e.g. P00441;Q9Y6K9)
+  const first = s.split(/[;,\s|/]+/).find((part) => UNIPROT_ACC_RE.test(part));
+  if (first) {
+    const m = first.match(UNIPROT_ACC_RE);
+    if (m?.[1]) return stripIsoformSuffix(normalizeId(m[1]));
+  }
+  return null;
+}
+
+/**
+ * Split FragPipe multi-gene cells.
+ * Prefer `;` / whitespace / `|` separators. Commas only split when both sides
+ * look like gene symbols (avoids breaking rare names like `DUR1,2`).
+ */
+export function splitGeneCandidates(raw: string): string[] {
+  if (!raw?.trim()) return [];
+  const looksLikeSymbol = (s: string) => /^[A-Za-z][A-Za-z0-9]*$/.test(s);
+  // Comma+whitespace is a list separator; bare commas inside tokens (DUR1,2) stay.
+  const normalized = raw.replace(/,\s+/g, ";");
+  const parts: string[] = [];
+  for (const chunk of normalized.split(/[;\s|/]+/)) {
+    const t = chunk.trim();
+    if (!t) continue;
+    if (t.includes(",")) {
+      const sides = t.split(",").map((x) => x.trim()).filter(Boolean);
+      if (sides.length >= 2 && sides.every(looksLikeSymbol)) {
+        parts.push(...sides);
+        continue;
+      }
+    }
+    parts.push(t);
+  }
+  return parts.map((g) => normalizeId(g)).filter(Boolean);
+}
+
+export interface GoGeneResolve {
+  /** Uppercase gene symbol key for GO_DEMO_GENE_TERMS (empty if unresolved). */
+  key: string;
+  source: GoIdSource;
+  /** Which FragPipe field supplied the matched ID (null when unresolved). */
+  column: GoIdColumn | null;
+  /** Display / diagnostics label before resolution. */
+  label: string;
+}
+
+/**
+ * Resolve a volcano / protein row to a GO mapping key.
+ * Prefers Gene symbols that hit the term map; falls back to UniProt→gene aliases
+ * when Gene is missing, sparse, or itself an accession.
+ */
+export function resolveGoGene(
+  p: Pick<VolcanoPoint, "gene" | "proteinId">,
+  opts?: {
+    geneTerms?: Record<string, string[]>;
+    uniprotToGene?: Record<string, string>;
+  },
+): GoGeneResolve {
+  const geneTerms = opts?.geneTerms ?? GO_DEMO_GENE_TERMS;
+  const uniprotToGene = opts?.uniprotToGene ?? GO_UNIPROT_TO_GENE;
+
+  const hasTerms = (key: string): boolean => Boolean(geneTerms[key]?.length);
+
+  const trySymbol = (
+    sym: string,
+    column: GoIdColumn,
+  ): GoGeneResolve | null => {
+    if (!sym) return null;
+    if (hasTerms(sym)) return { key: sym, source: "gene", column, label: sym };
+    return null;
+  };
+
+  const tryUniprot = (
+    raw: string,
+    label: string,
+    column: GoIdColumn,
+  ): GoGeneResolve | null => {
+    const acc = extractUniprotAccession(raw);
+    if (!acc) return null;
+    const gene = uniprotToGene[acc];
+    if (gene && hasTerms(gene)) {
+      return { key: gene, source: "uniprot", column, label: label || acc };
+    }
+    // Direct accession key in geneTerms (rare; supports test overrides)
+    if (hasTerms(acc)) {
+      return { key: acc, source: "uniprot", column, label: label || acc };
+    }
+    return null;
+  };
+
+  const geneRaw = p.gene?.trim() ?? "";
+  const proteinRaw = p.proteinId?.trim() ?? "";
+
+  // 1) Gene column candidates (symbols first)
+  for (const cand of splitGeneCandidates(geneRaw)) {
+    const hit = trySymbol(cand, "Gene");
+    if (hit) return hit;
+  }
+
+  // 2) Gene column may itself be a UniProt accession (empty-Gene path sets gene=proteinId)
+  for (const cand of splitGeneCandidates(geneRaw)) {
+    const hit = tryUniprot(cand, cand, "Gene");
+    if (hit) return hit;
+  }
+  if (geneRaw) {
+    const hit = tryUniprot(geneRaw, normalizeId(geneRaw), "Gene");
+    if (hit) return hit;
+  }
+
+  // 3) Protein ID / Protein-style field
+  if (proteinRaw) {
+    const asSymbol = trySymbol(normalizeId(proteinRaw), "Protein ID");
+    if (asSymbol) return asSymbol;
+    const hit = tryUniprot(
+      proteinRaw,
+      normalizeId(stripIsoformSuffix(proteinRaw)),
+      "Protein ID",
+    );
+    if (hit) return hit;
+  }
+
+  const label =
+    normalizeId(geneRaw) ||
+    normalizeId(stripIsoformSuffix(proteinRaw)) ||
+    "";
+  return { key: "", source: "unresolved", column: null, label };
+}
+
+/** @deprecated Prefer resolveGoGene — kept for callers expecting a single string key. */
+export function geneKeyFromPoint(
+  p: Pick<VolcanoPoint, "gene" | "proteinId">,
+): string {
+  return resolveGoGene(p).key || normalizeId(p.gene || p.proteinId || "");
 }
 
 function selectForeground(
@@ -137,10 +303,24 @@ export function benjaminiHochberg(pValues: number[]): number[] {
   return adj;
 }
 
+function summarizeIdColumn(
+  geneColumnHits: number,
+  proteinColumnHits: number,
+): GoEnrichmentResult["idColumnUsed"] {
+  if (geneColumnHits > 0 && proteinColumnHits > 0) return "mixed";
+  if (geneColumnHits > 0) return "Gene";
+  if (proteinColumnHits > 0) return "Protein ID";
+  return "none";
+}
+
 /**
  * Client-side GO enrichment against the bundled demo mapping (or overrides).
  * Background = all proteins in `points` that resolve to at least one GO term.
  * Foreground = significant / up / down subset of that background.
+ *
+ * ID resolution: FragPipe `Gene` (case-insensitive, multi-gene split) first;
+ * then compact UniProt accession → gene aliases when Gene is missing/sparse
+ * or holds an accession. Not a full UniProt/GOA database.
  */
 export function enrichGoTerms(
   points: VolcanoPoint[],
@@ -152,8 +332,10 @@ export function enrichGoTerms(
   const minHits = opts.minHits ?? 2;
   const ranking = opts.ranking ?? "negLog10AdjP";
   const geneTerms = opts.geneTerms ?? GO_DEMO_GENE_TERMS;
+  const uniprotToGene = opts.uniprotToGene ?? GO_UNIPROT_TO_GENE;
   const catalog = opts.termCatalog ?? GO_DEMO_TERMS;
   const termById = new Map(catalog.map((t) => [t.id, t]));
+  const resolveOpts = { geneTerms, uniprotToGene };
 
   const allowedAspect = (id: string): boolean => {
     if (aspect === "all") return true;
@@ -163,13 +345,13 @@ export function enrichGoTerms(
   const backgroundKeys: string[] = [];
   const seenBg = new Set<string>();
   for (const p of points) {
-    const key = geneKeyFromPoint(p);
-    if (!key || seenBg.has(key)) continue;
-    const terms = geneTerms[key];
+    const resolved = resolveGoGene(p, resolveOpts);
+    if (!resolved.key || seenBg.has(resolved.key)) continue;
+    const terms = geneTerms[resolved.key];
     if (!terms?.length) continue;
     if (!terms.some(allowedAspect)) continue;
-    seenBg.add(key);
-    backgroundKeys.push(key);
+    seenBg.add(resolved.key);
+    backgroundKeys.push(resolved.key);
   }
 
   const fgPoints = selectForeground(points, direction);
@@ -177,20 +359,31 @@ export function enrichGoTerms(
   const seenFg = new Set<string>();
   const unmappedForeground: string[] = [];
   const seenUnmapped = new Set<string>();
+  /** Unique FG gene keys resolved from the Gene column (symbol or accession-in-Gene). */
+  let fgGeneColumnHits = 0;
+  /** Unique FG gene keys resolved from Protein ID. */
+  let fgProteinColumnHits = 0;
+  /** Unique FG gene keys that used UniProt→gene alias (any column). */
+  let resolvedViaUniprot = 0;
+
   for (const p of fgPoints) {
-    const key = geneKeyFromPoint(p);
-    if (!key) continue;
-    if (!geneTerms[key]?.some(allowedAspect)) {
-      if (!seenUnmapped.has(key)) {
-        seenUnmapped.add(key);
-        unmappedForeground.push(key);
+    const resolved = resolveGoGene(p, resolveOpts);
+    if (!resolved.key || !geneTerms[resolved.key]?.some(allowedAspect)) {
+      const label = resolved.label || normalizeId(p.gene || p.proteinId || "");
+      if (label && !seenUnmapped.has(label)) {
+        seenUnmapped.add(label);
+        unmappedForeground.push(label);
       }
       continue;
     }
-    if (!seenBg.has(key)) continue;
-    if (seenFg.has(key)) continue;
-    seenFg.add(key);
-    foregroundKeys.push(key);
+    if (!seenBg.has(resolved.key)) continue;
+    if (seenFg.has(resolved.key)) continue;
+    seenFg.add(resolved.key);
+    foregroundKeys.push(resolved.key);
+    // Count after unique-gene dedup so footer stats match annotated FG size.
+    if (resolved.column === "Gene") fgGeneColumnHits += 1;
+    if (resolved.column === "Protein ID") fgProteinColumnHits += 1;
+    if (resolved.source === "uniprot") resolvedViaUniprot += 1;
   }
 
   const N = backgroundKeys.length;
@@ -269,6 +462,8 @@ export function enrichGoTerms(
     annotatedForeground: n,
     annotatedBackground: N,
     unmappedForeground,
+    resolvedViaUniprot,
+    idColumnUsed: summarizeIdColumn(fgGeneColumnHits, fgProteinColumnHits),
     aspect,
     direction,
     ranking,

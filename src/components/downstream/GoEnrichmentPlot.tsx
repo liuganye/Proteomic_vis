@@ -142,9 +142,12 @@ export function GoEnrichmentPlot({
         <strong className="font-medium text-slate-800">Demo mapping:</strong>{" "}
         enrichment runs client-side against a bundled gene→GO table (mock genes +
         common pathway symbols), not a full UniProt/GOA database. Uploaded IDs
-        match on the FragPipe <code className="rounded bg-white px-1">Gene</code>{" "}
-        column (case-insensitive). Unmapped significant genes are listed below
-        the chart. Not a substitute for clusterProfiler / g:Profiler / DAVID.
+        match the FragPipe <code className="rounded bg-white px-1">Gene</code>{" "}
+        column (case-insensitive; multi-gene cells split), then a compact
+        UniProt accession→gene alias list when Gene is missing or holds an
+        accession. Coverage is limited to the curated demo set — not a GOA dump.
+        Unmapped significant IDs are listed below the chart. Not a substitute for
+        clusterProfiler / g:Profiler / DAVID.
       </p>
 
       <div className="mb-4 flex flex-wrap items-end gap-2 text-sm">
@@ -211,18 +214,68 @@ export function GoEnrichmentPlot({
           {error}
         </p>
       ) : !result || result.annotatedForeground === 0 ? (
-        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
           {sigCounts[direction === "significant" ? "significant" : direction] ===
-          0
-            ? `No ${direction === "significant" ? "significant" : direction} proteins at the current thresholds. Relax |log2FC| / adj.P or switch protein set.`
-            : `None of the ${direction} proteins map to the bundled GO table for this aspect. Try “All aspects”, Load mock data, or upload a table whose Gene symbols overlap the demo mapping.`}
-        </p>
+          0 ? (
+            <p>
+              No {direction === "significant" ? "significant" : direction}{" "}
+              proteins at the current thresholds. Relax |log2FC| / adj.P or
+              switch protein set.
+            </p>
+          ) : (
+            <>
+              <p>
+                None of the {direction} proteins map to the bundled GO table for
+                this aspect.
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Unmapped {direction} IDs:{" "}
+                {result?.unmappedForeground.length ??
+                  sigCounts[
+                    direction === "significant" ? "significant" : direction
+                  ]}
+                {result ? (
+                  <>
+                    {" "}
+                    · lookup column:{" "}
+                    <span className="font-medium text-slate-700">
+                      {result.idColumnUsed === "none"
+                        ? "none matched (tried Gene, then Protein ID)"
+                        : result.idColumnUsed}
+                    </span>
+                  </>
+                ) : null}
+                . Try “All aspects”, ensure FragPipe Gene symbols overlap the
+                demo map, or upload Protein IDs covered by the compact UniProt
+                alias list.
+              </p>
+              {result && result.unmappedForeground.length > 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Examples:{" "}
+                  {result.unmappedForeground.slice(0, 16).join(", ")}
+                  {result.unmappedForeground.length > 16 ? "…" : ""}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       ) : result.terms.length === 0 ? (
-        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
-          Annotated foreground has {result.annotatedForeground} gene(s) (background{" "}
-          {result.annotatedBackground}), but no term passed the minimum hit
-          filter (≥2). Broaden the protein set or aspect.
-        </p>
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
+          <p>
+            Annotated foreground has {result.annotatedForeground} gene(s)
+            (background {result.annotatedBackground}), but no term passed the
+            minimum hit filter (≥2). Broaden the protein set or aspect.
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            ID column used: {result.idColumnUsed}
+            {result.resolvedViaUniprot > 0
+              ? ` · ${result.resolvedViaUniprot} via UniProt alias`
+              : ""}
+            {result.unmappedForeground.length > 0
+              ? ` · unmapped ${result.unmappedForeground.length}`
+              : ""}
+          </p>
+        </div>
       ) : (
         <>
           <div className="h-[min(28rem,70vh)] w-full min-h-72">
@@ -313,6 +366,12 @@ export function GoEnrichmentPlot({
             <li>
               Annotated FG {result.annotatedForeground} / BG{" "}
               {result.annotatedBackground} · showing top {result.terms.length}
+            </li>
+            <li>
+              ID column: {result.idColumnUsed}
+              {result.resolvedViaUniprot > 0
+                ? ` · ${result.resolvedViaUniprot} via UniProt`
+                : ""}
             </li>
           </ul>
 
