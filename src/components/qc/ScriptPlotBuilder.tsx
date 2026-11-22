@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { postCustomPlot } from "@/lib/custom-plot-client";
 import { SCRIPT_EXAMPLES } from "@/lib/custom-plot-examples";
 import type { SampleMetricRow } from "@/lib/custom-plot-metrics";
 import { newUserPlotId } from "@/lib/custom-plot-metrics";
@@ -51,15 +52,11 @@ export function ScriptPlotBuilder({
     setStatus("loading");
     setError(null);
     try {
-      const res = await fetch("/api/custom-plot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language,
-          source,
-          samples: sampleRows,
-          inputs: {},
-        }),
+      const res = await postCustomPlot({
+        language,
+        source,
+        samples: sampleRows,
+        inputs: {},
       });
       const body = (await res.json()) as CustomPlotRunResponse;
       if (!body.ok) {

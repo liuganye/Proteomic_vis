@@ -14,6 +14,9 @@ export const dynamic = "force-dynamic";
  * POST /api/custom-plot
  * Run a constrained Python (or JS) snippet against sample summary rows.
  * Contract: docs/custom-plot-script-api.md
+ *
+ * Auth: x-custom-plot-secret, or HttpOnly session cookie + x-custom-plot-csrf
+ * (mint via GET /api/custom-plot/session). Origin / Sec-Fetch-Site are ignored.
  */
 export async function POST(request: Request) {
   const access = checkCustomPlotApiAccess(request);
@@ -69,13 +72,27 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  const access = checkCustomPlotApiAccess(request);
+/** Status probe — does not grant execution access. */
+export async function GET() {
+  const secret = Boolean(process.env.CUSTOM_PLOT_API_SECRET?.trim());
+  const allowUnauth =
+    process.env.CUSTOM_PLOT_ALLOW_UNAUTHENTICATED === "1" ||
+    process.env.CUSTOM_PLOT_ALLOW_UNAUTHENTICATED === "true";
+  const isProd = process.env.NODE_ENV === "production";
+  const mode =
+    !secret && !isProd
+      ? "open"
+      : !secret && allowUnauth
+        ? "open"
+      : !secret && isProd
+        ? "disabled"
+        : "gated";
   return NextResponse.json({
     service: "custom-plot",
     languages: ["python", "js"],
     docs: "/docs/custom-plot-script-api.md",
     registerEvent: "proteomics:register-custom-plot",
-    access: access.ok ? "allowed" : "denied",
+    mode,
+    session: "/api/custom-plot/session",
   });
 }

@@ -19,6 +19,7 @@ import {
   metricLabel,
   type SampleMetricRow,
 } from "@/lib/custom-plot-metrics";
+import { postCustomPlot } from "@/lib/custom-plot-client";
 import type { CustomPlotRunResponse } from "@/lib/custom-plot-script";
 import {
   buildConditionColorMap,
@@ -30,6 +31,9 @@ import type {
   UserCustomPlotSpec,
 } from "@/lib/types";
 import { ChartSpecView } from "./ChartSpecView";
+
+/** Debounce scope-driven re-runs so filter/selection churn does not fan out. */
+const SCRIPT_RERUN_DEBOUNCE_MS = 280;
 
 function buildHistogram(values: number[], bins = 20) {
   if (values.length === 0) return [];
@@ -113,24 +117,27 @@ export function UserDefinedPlot({
   useEffect(() => {
     if (spec.kind !== "script" || !spec.source?.trim()) return;
     let cancelled = false;
+    const controller = new AbortController();
     setScriptStatus("loading");
     setScriptError(null);
 
     const run = async () => {
       try {
-        const res = await fetch("/api/custom-plot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const res = await postCustomPlot(
+          {
             language: spec.language ?? "python",
             source: spec.source,
             samples: rows,
             inputs: spec.inputs ?? {},
-          }),
-        });
+          },
+          { signal: controller.signal },
+        );
         const body = (await res.json()) as CustomPlotRunResponse;
         if (cancelled) return;
         if (!body.ok) {
+          // Clear stale chart so a failed re-run cannot show the prior scope.
+          setLiveChart(undefined);
+          onUpdate?.(spec.id, { chartSpec: undefined });
           setScriptError(body.error || `Run failed (HTTP ${res.status})`);
           setScriptStatus("error");
           return;
@@ -140,13 +147,22 @@ export function UserDefinedPlot({
         setScriptStatus("idle");
       } catch (err) {
         if (cancelled) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLiveChart(undefined);
+        onUpdate?.(spec.id, { chartSpec: undefined });
         setScriptError(err instanceof Error ? err.message : String(err));
         setScriptStatus("error");
       }
     };
-    void run();
+
+    const timer = window.setTimeout(() => {
+      void run();
+    }, SCRIPT_RERUN_DEBOUNCE_MS);
+
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
     };
     // Intentionally omit onUpdate — parent setters are unstable; rowsKey drives refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,7 +216,15 @@ export function UserDefinedPlot({
           ) : null}
           {liveChart ? (
             <ChartSpecView chartSpec={liveChart} />
-          ) : scriptStatus === "loading" ? null : (
+          ) : scriptStatus === "loading" ? null : scriptError ? (
+            <p
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-950"
+              role="status"
+            >
+              Chart cleared after a failed re-run so a prior protein scope is not
+              shown. Fix the script or adjust the filter and try again.
+            </p>
+          ) : (
             <p
               className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600"
               role="status"
