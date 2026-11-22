@@ -5,26 +5,16 @@ import type {
   QcConclusion,
   VolcanoPoint,
 } from "./types";
+import { CHART } from "./chart-palette";
 
-/** Distinct hues for arbitrary annotation groups — mirrors chart-palette.ts (no purple cliché). */
-const CONDITION_PALETTE = [
-  "#0d7377", // teal
-  "#c45c26", // burnt orange
-  "#2f5d8c", // steel blue
-  "#5a7a3a", // olive
-  "#8b4a3a", // brick
-  "#3d6b6e", // sea glass
-  "#a67c2d", // ochre
-  "#4a5560", // slate
-  "#1f6f5b", // forest
-  "#9a3412", // rust
-];
+/** Distinct hues for arbitrary annotation groups — single source: chart-palette. */
+const CONDITION_PALETTE = [...CHART.hex.series];
 
 const PREFERRED_CONDITION_COLORS: Record<string, string> = {
-  "group a": "#0d7377",
-  "group b": "#b45309",
-  human: "#0d7377",
-  qc: "#b45309",
+  "group a": CHART.hex.up,
+  "group b": CHART.hex.down,
+  human: CHART.hex.up,
+  qc: CHART.hex.down,
 };
 
 /** Stable color map for every condition/group label present. */
@@ -37,7 +27,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
     seen.add(g);
     unique.push(g);
   }
-  const map: Record<string, string> = { Unknown: "#8a9aa5" };
+  const map: Record<string, string> = { Unknown: CHART.hex.ns };
   let paletteIdx = 0;
   for (const g of unique) {
     const preferred = PREFERRED_CONDITION_COLORS[g.toLowerCase()];
@@ -53,7 +43,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
       paletteIdx += 1;
     }
     map[g] =
-      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#8a9aa5";
+      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? CHART.hex.ns;
     paletteIdx += 1;
   }
   return map;
@@ -64,7 +54,7 @@ export function conditionColor(
   colorMap: Record<string, string>,
 ): string {
   const g = (condition ?? "").trim() || "Unknown";
-  return colorMap[g] ?? colorMap.Unknown ?? "#8a9aa5";
+  return colorMap[g] ?? colorMap.Unknown ?? CHART.hex.ns;
 }
 
 /** Order samples by condition (annotation order), then sample name. */

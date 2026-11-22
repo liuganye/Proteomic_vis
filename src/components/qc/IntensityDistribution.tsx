@@ -122,8 +122,73 @@ export function IntensityDistribution({
       </div>
   );
 
+  const quartileDetails = (
+    <details className={compact ? "mt-2" : undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-teal-800">
+        Show exact per-sample statistics ({visibleBoxes.length} samples)
+      </summary>
+      <header className="mb-2 mt-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
+          Per-sample log<sub>10</sub> MaxLFQ quartiles
+        </h3>
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          {visibleBoxes.length} samples · click to highlight
+        </span>
+      </header>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Sample</th>
+              <th className="px-3 py-2">Condition</th>
+              <th className="px-3 py-2">n</th>
+              <th className="px-3 py-2">Median</th>
+              <th className="px-3 py-2">Q1–Q3</th>
+              <th className="px-3 py-2">Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleBoxes.map((b) => (
+              <tr key={b.sample} className={`border-t border-slate-100 ${selectedSamples.includes(b.sample) ? "bg-teal-50" : ""}`} data-selected={selectedSamples.includes(b.sample)}>
+                <td className="px-3 py-2 font-medium text-slate-900">
+                  <button type="button" aria-label={`Select sample ${b.sample} in intensity summary`} aria-pressed={selectedSamples.includes(b.sample)} onClick={() => onSelectSamples([b.sample])} className="rounded underline underline-offset-4 focus-visible:outline-teal-700">{b.sample}</button>
+                </td>
+                <td className="px-3 py-2 text-slate-700">
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-sm"
+                      style={{
+                        background: conditionColor(b.condition, colorMap),
+                      }}
+                    />
+                    {b.condition}
+                  </span>
+                </td>
+                <td className="px-3 py-2 tabular-nums">{b.n}</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {b.n > 0 ? b.median.toFixed(2) : "—"}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {b.n > 0 ? `${b.q1.toFixed(2)} – ${b.q3.toFixed(2)}` : "—"}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {b.n > 0 ? `${b.min.toFixed(2)} – ${b.max.toFixed(2)}` : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+
   if (compact) {
-    return histogramBlock;
+    return (
+      <div>
+        {histogramBlock}
+        {quartileDetails}
+      </div>
+    );
   }
 
   return (
@@ -179,61 +244,7 @@ export function IntensityDistribution({
         </div>
       </div>
 
-      <details>
-        <summary className="cursor-pointer text-sm font-medium text-teal-800">Show exact per-sample statistics ({visibleBoxes.length} samples)</summary>
-        <header className="mb-2 mt-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-900">
-            Per-sample log<sub>10</sub> MaxLFQ quartiles
-          </h3>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            {visibleBoxes.length} samples · click to highlight
-          </span>
-        </header>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Sample</th>
-                <th className="px-3 py-2">Condition</th>
-                <th className="px-3 py-2">n</th>
-                <th className="px-3 py-2">Median</th>
-                <th className="px-3 py-2">Q1–Q3</th>
-                <th className="px-3 py-2">Range</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleBoxes.map((b) => (
-                <tr key={b.sample} className={`border-t border-slate-100 ${selectedSamples.includes(b.sample) ? "bg-teal-50" : ""}`} data-selected={selectedSamples.includes(b.sample)}>
-                  <td className="px-3 py-2 font-medium text-slate-900">
-                    <button type="button" aria-label={`Select sample ${b.sample} in intensity summary`} aria-pressed={selectedSamples.includes(b.sample)} onClick={() => onSelectSamples([b.sample])} className="rounded underline underline-offset-4 focus-visible:outline-teal-700">{b.sample}</button>
-                  </td>
-                  <td className="px-3 py-2 text-slate-700">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-sm"
-                        style={{
-                          background: conditionColor(b.condition, colorMap),
-                        }}
-                      />
-                      {b.condition}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{b.n}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {b.n > 0 ? b.median.toFixed(2) : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {b.n > 0 ? `${b.q1.toFixed(2)} – ${b.q3.toFixed(2)}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {b.n > 0 ? `${b.min.toFixed(2)} – ${b.max.toFixed(2)}` : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+      {quartileDetails}
     </div>
   );
 }

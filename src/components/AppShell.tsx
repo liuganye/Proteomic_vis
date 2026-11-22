@@ -12,12 +12,11 @@ import {
   type QcProteinFilter,
 } from "@/lib/qc-protein-filter";
 import type {
-  DownstreamModuleId,
   QcPlotId,
   SectionId,
   UserCustomPlotSpec,
 } from "@/lib/types";
-import { DownstreamPanel } from "./downstream/DownstreamPanel";
+import { DownstreamMultiples } from "./downstream/DownstreamMultiples";
 import { FileUploadPanel } from "./FileUploadPanel";
 import { QcPanel } from "./qc/QcPanel";
 import { RealExplore } from "./RealExplore";
@@ -29,8 +28,6 @@ const QC_NAV: { id: QcPlotId; label: string; description: string }[] = [
   { id: "correlation", label: "Correlation", description: "Sample–sample similarity" },
   { id: "median-vs-missing", label: "Median vs missing", description: "Coverage and signal together" },
 ];
-
-const DOWNSTREAM_GRID: DownstreamModuleId[] = ["volcano", "results", "go"];
 
 export function AppShell() {
   const { state, loadMock, loadFiles, loadReal, clear } = useDataset();
@@ -319,8 +316,9 @@ export function AppShell() {
                     </button>
                   </div>
                   <p className="text-sm text-slate-600">
-                    Volcano, results table, and GO enrichment share one screen.
-                    Click points, rows, or GO genes to select proteins for QC.
+                    Volcano, results table, and GO enrichment share one contrast
+                    and one screen. Click points, rows, or GO genes to select
+                    proteins for QC.
                     {selectedProteinIds.length > 0 ? (
                       <>
                         {" "}
@@ -338,72 +336,11 @@ export function AppShell() {
                       </>
                     ) : null}
                   </p>
-                  <div
-                    className="plot-multiples"
-                    data-testid="downstream-plot-multiples"
-                  >
-                    {DOWNSTREAM_GRID.map((module) => (
-                      <div
-                        key={module}
-                        className="plot-multiples__cell"
-                        data-testid={`downstream-cell-${module}`}
-                      >
-                        <DownstreamPanel
-                          dataset={state.dataset!}
-                          module={module}
-                          selectedProteinIds={selectedProteinIds}
-                          onSelectProteins={setSelectedProteinIds}
-                        />
-                      </div>
-                    ))}
-                    {/* Fill toward ~9 cells with linked QC cues / placeholders */}
-                    <div className="plot-multiples__cell">
-                      <h3 className="text-base font-semibold text-slate-900">
-                        Selected proteins
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-600">
-                        Proteins chosen here scope QC plots.
-                      </p>
-                      <ul className="mt-3 max-h-48 space-y-1 overflow-auto text-xs">
-                        {selectedProteinIds.length === 0 ? (
-                          <li className="text-slate-500">None selected</li>
-                        ) : (
-                          selectedProteinIds.map((id) => (
-                            <li key={id} className="font-mono text-slate-800">
-                              {id}
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
-                    <div className="plot-multiples__cell">
-                      <h3 className="text-base font-semibold text-slate-900">
-                        Contrast tips
-                      </h3>
-                      <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                        Pick two annotation groups in any panel. Limma columns
-                        are preferred; otherwise MaxLFQ group means approximate
-                        the volcano (demo only).
-                      </p>
-                    </div>
-                    <div className="plot-multiples__cell">
-                      <h3 className="text-base font-semibold text-slate-900">
-                        Real HYE workspace
-                      </h3>
-                      <p className="mt-2 text-xs text-slate-600">
-                        For the seven-view Downstream canvas, choose{" "}
-                        <strong>Real HYE</strong> in the unified data portal on
-                        the QC page — there is no separate load path here.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSection("qc")}
-                        className="mt-3 rounded border border-[color:var(--portal-border)] bg-white px-3 py-1.5 text-sm text-[color:var(--chart-accent-deep)]"
-                      >
-                        Open data portal
-                      </button>
-                    </div>
-                  </div>
+                  <DownstreamMultiples
+                    dataset={state.dataset}
+                    selectedProteinIds={selectedProteinIds}
+                    onSelectProteins={setSelectedProteinIds}
+                  />
                 </section>
               )}
               {state.status === "loading" && (

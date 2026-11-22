@@ -29,11 +29,22 @@ import { VOLCANO_COLORS } from "@/lib/chart-palette";
 
 const COLORS = VOLCANO_COLORS;
 
+export type DownstreamContrast = {
+  groupA: string;
+  groupB: string;
+  fcThr: number;
+  pThr: number;
+};
+
 interface Props {
   dataset: FragPipeDataset;
   module: DownstreamModuleId;
   selectedProteinIds?: string[];
   onSelectProteins?: (ids: string[]) => void;
+  /** When set, contrast is controlled by the parent (shared across multiples). */
+  contrast?: DownstreamContrast;
+  onContrastChange?: (patch: Partial<DownstreamContrast>) => void;
+  hideControls?: boolean;
 }
 
 export function DownstreamPanel({
@@ -41,6 +52,9 @@ export function DownstreamPanel({
   module,
   selectedProteinIds = [],
   onSelectProteins,
+  contrast: contrastProp,
+  onContrastChange,
+  hideControls = false,
 }: Props) {
   const selectedSet = useMemo(
     () => new Set(selectedProteinIds),
@@ -64,16 +78,30 @@ export function DownstreamPanel({
   const groups = useMemo(() => annotationGroups(dataset), [dataset]);
   const defaults = useMemo(() => defaultGroupPair(groups), [groups]);
 
-  const [groupA, setGroupA] = useState(defaults.groupA);
-  const [groupB, setGroupB] = useState(defaults.groupB);
-  const [fcThr, setFcThr] = useState(1);
-  const [pThr, setPThr] = useState(0.05);
+  const [localGroupA, setLocalGroupA] = useState(defaults.groupA);
+  const [localGroupB, setLocalGroupB] = useState(defaults.groupB);
+  const [localFcThr, setLocalFcThr] = useState(1);
+  const [localPThr, setLocalPThr] = useState(0.05);
 
-  // Re-default when a new dataset / annotation arrives
+  // Re-default when a new dataset / annotation arrives (uncontrolled only)
   useEffect(() => {
-    setGroupA(defaults.groupA);
-    setGroupB(defaults.groupB);
-  }, [defaults.groupA, defaults.groupB, dataset.source, dataset.annotationFileName]);
+    if (contrastProp) return;
+    setLocalGroupA(defaults.groupA);
+    setLocalGroupB(defaults.groupB);
+  }, [contrastProp, defaults.groupA, defaults.groupB, dataset.source, dataset.annotationFileName]);
+
+  const groupA = contrastProp?.groupA ?? localGroupA;
+  const groupB = contrastProp?.groupB ?? localGroupB;
+  const fcThr = contrastProp?.fcThr ?? localFcThr;
+  const pThr = contrastProp?.pThr ?? localPThr;
+  const setGroupA = (v: string) =>
+    onContrastChange ? onContrastChange({ groupA: v }) : setLocalGroupA(v);
+  const setGroupB = (v: string) =>
+    onContrastChange ? onContrastChange({ groupB: v }) : setLocalGroupB(v);
+  const setFcThr = (v: number) =>
+    onContrastChange ? onContrastChange({ fcThr: v }) : setLocalFcThr(v);
+  const setPThr = (v: number) =>
+    onContrastChange ? onContrastChange({ pThr: v }) : setLocalPThr(v);
 
   const canCompare = Boolean(groupA && groupB && groupA !== groupB);
 
@@ -86,7 +114,7 @@ export function DownstreamPanel({
     [dataset, groupA, groupB, fcThr, pThr],
   );
 
-  const groupControls = (
+  const groupControls = hideControls ? null : (
     <div className="flex flex-wrap items-end gap-2 text-sm">
       <label className="flex flex-col gap-1">
         <span className="text-slate-600">Group A</span>
@@ -165,17 +193,20 @@ export function DownstreamPanel({
   if (module === "results") {
     return (
       <div>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className={`flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${hideControls ? "mb-2" : "mb-4"}`}>
           <div>
-            <p className="text-sm text-slate-600">
-              Groups from{" "}
-              <code className="rounded bg-slate-100 px-1">
-                experiment_annotation.tsv
-              </code>{" "}
-              condition/group column (aligned to MaxLFQ sample prefixes). Results
-              follow the selected contrast; Protein Probability is shown when
-              present in the protein table.
-            </p>
+            <h3 className="text-base font-semibold text-slate-900">Results table</h3>
+            {!hideControls && (
+              <p className="text-sm text-slate-600">
+                Groups from{" "}
+                <code className="rounded bg-slate-100 px-1">
+                  experiment_annotation.tsv
+                </code>{" "}
+                condition/group column (aligned to MaxLFQ sample prefixes). Results
+                follow the selected contrast; Protein Probability is shown when
+                present in the protein table.
+              </p>
+            )}
           </div>
           {groupControls}
         </div>
@@ -205,14 +236,17 @@ export function DownstreamPanel({
   if (module === "go") {
     return (
       <div>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className={`flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${hideControls ? "mb-2" : "mb-4"}`}>
           <div>
-            <p className="text-sm text-slate-600">
-              Enrich significant proteins from the current Group A vs Group B
-              contrast (same thresholds as Volcano). Gene symbols (then UniProt
-              accessions via a compact alias list) are matched to a bundled demo
-              GO mapping. Click a term to select its foreground proteins for QC.
-            </p>
+            <h3 className="text-base font-semibold text-slate-900">GO enrichment</h3>
+            {!hideControls && (
+              <p className="text-sm text-slate-600">
+                Enrich significant proteins from the current Group A vs Group B
+                contrast (same thresholds as Volcano). Gene symbols (then UniProt
+                accessions via a compact alias list) are matched to a bundled demo
+                GO mapping. Click a term to select its foreground proteins for QC.
+              </p>
+            )}
           </div>
           {groupControls}
         </div>
@@ -246,16 +280,18 @@ export function DownstreamPanel({
 
   return (
     <div>
-      <header className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className={`flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${hideControls ? "mb-2" : "mb-3"}`}>
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Volcano plot</h3>
-          <p className="text-sm text-slate-600">
-            Choose any two annotation groups. MaxLFQ columns are autodetected
-            (`{"{sample} MaxLFQ Intensity"}`) and mapped to groups via sample ID,
-            Control↔CTRK-style synonyms, or residual size matching. Uses limma
-            when that contrast exists; otherwise approximates from MaxLFQ group
-            means.
-          </p>
+          {!hideControls && (
+            <p className="text-sm text-slate-600">
+              Choose any two annotation groups. MaxLFQ columns are autodetected
+              (`{"{sample} MaxLFQ Intensity"}`) and mapped to groups via sample ID,
+              Control↔CTRK-style synonyms, or residual size matching. Uses limma
+              when that contrast exists; otherwise approximates from MaxLFQ group
+              means.
+            </p>
+          )}
         </div>
         {groupControls}
       </header>

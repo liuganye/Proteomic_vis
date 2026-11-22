@@ -1,9 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoadState } from "@/lib/types";
 
 type PortalSource = "mock" | "real" | "upload";
+
+function sourceFromDataset(
+  dataset: NonNullable<LoadState["dataset"]> | undefined,
+): PortalSource | null {
+  if (!dataset) return null;
+  if (dataset.source === "mock") return "mock";
+  if (dataset.source === "real") return "real";
+  return "upload";
+}
 
 interface Props {
   state: LoadState;
@@ -28,8 +37,22 @@ export function FileUploadPanel({
   const [proteinFile, setProteinFile] = useState<File | null>(null);
   const [annFile, setAnnFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [source, setSource] = useState<PortalSource>("upload");
+  /** User intent while idle/loading; overridden by loaded dataset when ready. */
+  const [intent, setIntent] = useState<PortalSource>("upload");
   const loading = state.status === "loading";
+  const loaded = sourceFromDataset(state.dataset);
+  const source: PortalSource =
+    state.status === "ready" && loaded ? loaded : intent;
+
+  // Keep selection aligned with whatever is actually loaded (auto-loadReal, Clear, etc.).
+  useEffect(() => {
+    if (state.status === "ready" && state.dataset) {
+      const next = sourceFromDataset(state.dataset);
+      if (next) setIntent(next);
+      return;
+    }
+    if (state.status === "idle") setIntent("upload");
+  }, [state.status, state.dataset]);
 
   const assignFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files);
@@ -47,7 +70,7 @@ export function FileUploadPanel({
       list.find((f) => f !== protein && /\.(tsv|txt)$/i.test(f.name));
     if (protein) setProteinFile(protein);
     if (annotation) setAnnFile(annotation);
-    setSource("upload");
+    setIntent("upload");
   }, []);
 
   const parseNow = useCallback(() => {
@@ -56,7 +79,7 @@ export function FileUploadPanel({
   }, [proteinFile, annFile, loading, onLoadFiles]);
 
   const activateSource = (next: PortalSource) => {
-    setSource(next);
+    setIntent(next);
     if (next === "mock" && !loading) onLoadMock();
     if (next === "real" && !loading) onLoadReal();
   };
@@ -91,6 +114,7 @@ export function FileUploadPanel({
               setAnnFile(null);
               if (proteinRef.current) proteinRef.current.value = "";
               if (annRef.current) annRef.current.value = "";
+              setIntent("upload");
               onClear();
             }}
             className="data-portal__clear"
@@ -102,7 +126,7 @@ export function FileUploadPanel({
 
       <div
         className="data-portal__sources"
-        role="tablist"
+        role="radiogroup"
         aria-label="Dataset source"
       >
         {(
@@ -115,8 +139,8 @@ export function FileUploadPanel({
           <button
             key={opt.id}
             type="button"
-            role="tab"
-            aria-selected={source === opt.id}
+            role="radio"
+            aria-checked={source === opt.id}
             data-testid={`portal-source-${opt.id}`}
             disabled={loading}
             className={`data-portal__source ${source === opt.id ? "is-active" : ""}`}
@@ -129,7 +153,7 @@ export function FileUploadPanel({
       </div>
 
       {source === "upload" && (
-        <div className="data-portal__upload">
+        <div className="data-portal__upload" id="data-portal-upload">
           <div
             className={`data-portal__drop ${dragOver ? "is-over" : ""}`}
             onDragOver={(e) => {
@@ -159,7 +183,10 @@ export function FileUploadPanel({
                 type="file"
                 accept=".tsv,.txt,text/tab-separated-values,text/plain"
                 className="data-portal__file-input"
-                onChange={(e) => setProteinFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  setProteinFile(e.target.files?.[0] ?? null);
+                  setIntent("upload");
+                }}
                 disabled={loading}
               />
               {proteinFile && (
@@ -181,7 +208,10 @@ export function FileUploadPanel({
                 type="file"
                 accept=".tsv,.txt,text/tab-separated-values,text/plain"
                 className="data-portal__file-input data-portal__file-input--secondary"
-                onChange={(e) => setAnnFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  setAnnFile(e.target.files?.[0] ?? null);
+                  setIntent("upload");
+                }}
                 disabled={loading}
               />
               {annFile && (
@@ -209,6 +239,13 @@ export function FileUploadPanel({
           Synthetic demo · 120 proteins · Group A: 4 samples (A_1–A_4) · Group B:
           3 samples (B_1–B_3). Illustrative values only — QC checks all seven
           samples; Group A vs Group B statistics are for demonstration.
+        </p>
+      )}
+
+      {source === "real" && state.status === "ready" && state.dataset?.source === "real" && (
+        <p className="data-portal__banner">
+          Real HYE FragPipe snapshot loaded. Switch to Mock or Upload TSV above
+          to change source; Clear resets the portal.
         </p>
       )}
 
@@ -276,10 +313,12 @@ export function FileUploadPanel({
           )}
         </>
       )}
-      {/* Keep test hook for mock load without requiring tab choreography in older tests */}
+      {/* Test hook only — not in the a11y tree */}
       <button
         type="button"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
         data-testid="load-mock-data"
         disabled={loading}
         onClick={() => activateSource("mock")}

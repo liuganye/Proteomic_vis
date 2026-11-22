@@ -164,7 +164,16 @@ code {
   outline: none;
   transition: box-shadow .15s, border-color .15s;
 }
-.plot-multiples__cell--builder { max-height: min(26vh, 260px); }
+.plot-multiples__cell--builder {
+  max-height: min(42vh, 420px);
+  grid-column: span 2;
+}
+@media (max-width: 1100px) {
+  .plot-multiples__cell--builder { grid-column: span 2; }
+}
+@media (max-width: 640px) {
+  .plot-multiples__cell--builder { grid-column: span 1; }
+}
 .plot-multiples__cell--wide { grid-column: span 1; }
 .plot-multiples__cell.is-highlighted {
   border-color: var(--chart-accent);
