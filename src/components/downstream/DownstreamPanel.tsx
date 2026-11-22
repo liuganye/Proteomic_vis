@@ -34,9 +34,35 @@ const COLORS = {
 interface Props {
   dataset: FragPipeDataset;
   module: DownstreamModuleId;
+  selectedProteinIds?: string[];
+  onSelectProteins?: (ids: string[]) => void;
 }
 
-export function DownstreamPanel({ dataset, module }: Props) {
+export function DownstreamPanel({
+  dataset,
+  module,
+  selectedProteinIds = [],
+  onSelectProteins,
+}: Props) {
+  const selectedSet = useMemo(
+    () => new Set(selectedProteinIds),
+    [selectedProteinIds],
+  );
+  const toggleProtein = (id: string, additive = false) => {
+    if (!onSelectProteins) return;
+    if (additive) {
+      if (selectedSet.has(id)) {
+        onSelectProteins(selectedProteinIds.filter((x) => x !== id));
+      } else {
+        onSelectProteins([...selectedProteinIds, id]);
+      }
+      return;
+    }
+    onSelectProteins(selectedSet.has(id) && selectedProteinIds.length === 1 ? [] : [id]);
+  };
+  const selectMany = (ids: string[]) => {
+    onSelectProteins?.(ids);
+  };
   const groups = useMemo(() => annotationGroups(dataset), [dataset]);
   const defaults = useMemo(() => defaultGroupPair(groups), [groups]);
 
@@ -166,7 +192,13 @@ export function DownstreamPanel({ dataset, module }: Props) {
             viewing DE results.
           </p>
         ) : (
-          <ResultsTable points={points} contrastLabel={contrastLabel} />
+          <ResultsTable
+            points={points}
+            contrastLabel={contrastLabel}
+            selectedProteinIds={selectedProteinIds}
+            onToggleProtein={(id) => toggleProtein(id, true)}
+            onSelectProteins={selectMany}
+          />
         )}
       </div>
     );
@@ -181,7 +213,7 @@ export function DownstreamPanel({ dataset, module }: Props) {
               Enrich significant proteins from the current Group A vs Group B
               contrast (same thresholds as Volcano). Gene symbols (then UniProt
               accessions via a compact alias list) are matched to a bundled demo
-              GO mapping.
+              GO mapping. Click a term to select its foreground proteins for QC.
             </p>
           </div>
           {groupControls}
@@ -204,6 +236,7 @@ export function DownstreamPanel({ dataset, module }: Props) {
           canCompare={canCompare}
           ready={ready}
           groupsAvailable={groups.length}
+          onSelectProteins={selectMany}
         />
       </div>
     );
@@ -322,9 +355,36 @@ export function DownstreamPanel({ dataset, module }: Props) {
                       stroke="#cbd5e1"
                       strokeDasharray="4 4"
                     />
-                    <Scatter data={ns} fill={COLORS.ns} name="NS" />
-                    <Scatter data={up} fill={COLORS.up} name="Up" />
-                    <Scatter data={down} fill={COLORS.down} name="Down" />
+                    <Scatter
+                      data={ns}
+                      fill={COLORS.ns}
+                      name="NS"
+                      onClick={(s) => {
+                        const p = s as unknown as VolcanoPoint;
+                        if (p?.proteinId) toggleProtein(p.proteinId, true);
+                      }}
+                      cursor="pointer"
+                    />
+                    <Scatter
+                      data={up}
+                      fill={COLORS.up}
+                      name="Up"
+                      onClick={(s) => {
+                        const p = s as unknown as VolcanoPoint;
+                        if (p?.proteinId) toggleProtein(p.proteinId, true);
+                      }}
+                      cursor="pointer"
+                    />
+                    <Scatter
+                      data={down}
+                      fill={COLORS.down}
+                      name="Down"
+                      onClick={(s) => {
+                        const p = s as unknown as VolcanoPoint;
+                        if (p?.proteinId) toggleProtein(p.proteinId, true);
+                      }}
+                      cursor="pointer"
+                    />
                   </ScatterChart>
                 </ResponsiveContainer>
               </div>
@@ -351,6 +411,35 @@ export function DownstreamPanel({ dataset, module }: Props) {
                   NS ({ns.length})
                 </li>
                 <li className="text-slate-500">Contrast: {contrastLabel}</li>
+                <li>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() =>
+                      selectMany(
+                        points.filter((p) => p.significant).map((p) => p.proteinId),
+                      )
+                    }
+                  >
+                    Select all significant
+                  </button>
+                </li>
+                {selectedProteinIds.length > 0 ? (
+                  <li>
+                    {selectedProteinIds.length} selected ·{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => selectMany([])}
+                    >
+                      Clear
+                    </button>
+                  </li>
+                ) : (
+                  <li className="text-slate-500">
+                    Click points to select proteins for QC
+                  </li>
+                )}
               </ul>
             </>
           )}

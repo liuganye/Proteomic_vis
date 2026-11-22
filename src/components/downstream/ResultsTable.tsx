@@ -7,9 +7,22 @@ import type { VolcanoPoint } from "@/lib/types";
 interface Props {
   points: VolcanoPoint[];
   contrastLabel: string;
+  selectedProteinIds?: string[];
+  onToggleProtein?: (id: string) => void;
+  onSelectProteins?: (ids: string[]) => void;
 }
 
-export function ResultsTable({ points, contrastLabel }: Props) {
+export function ResultsTable({
+  points,
+  contrastLabel,
+  selectedProteinIds = [],
+  onToggleProtein,
+  onSelectProteins,
+}: Props) {
+  const selectedSet = useMemo(
+    () => new Set(selectedProteinIds),
+    [selectedProteinIds],
+  );
   const [query, setQuery] = useState("");
   const [sigOnly, setSigOnly] = useState(false);
   const [page, setPage] = useState(0);
@@ -80,8 +93,20 @@ export function ResultsTable({ points, contrastLabel }: Props) {
               />
               Significant only
             </label>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+              onClick={() =>
+                onSelectProteins?.(rows.map((r) => r.proteinId))
+              }
+            >
+              Select visible for QC
+            </button>
             <span className="text-xs text-slate-500">
               {rows.length} / {points.length} proteins
+              {selectedProteinIds.length
+                ? ` · ${selectedProteinIds.length} selected`
+                : ""}
             </span>
           </div>
 
@@ -103,12 +128,31 @@ export function ResultsTable({ points, contrastLabel }: Props) {
               </thead>
               <tbody>
                 {pageRows.map((r) => (
-                  <tr key={r.proteinId} className="border-t border-slate-100">
+                  <tr
+                    key={r.proteinId}
+                    className={`border-t border-slate-100 ${
+                      selectedSet.has(r.proteinId) ? "bg-teal-50" : ""
+                    }`}
+                  >
                     <td className="px-3 py-1.5 tabular-nums text-slate-500">
-                      {r.rank}
+                      <button
+                        type="button"
+                        className="underline-offset-2 hover:underline"
+                        aria-pressed={selectedSet.has(r.proteinId)}
+                        onClick={() => onToggleProtein?.(r.proteinId)}
+                        title="Toggle QC selection"
+                      >
+                        {r.rank}
+                      </button>
                     </td>
                     <td className="px-3 py-1.5 font-medium text-slate-900">
-                      {r.gene}
+                      <button
+                        type="button"
+                        className="text-left hover:underline"
+                        onClick={() => onToggleProtein?.(r.proteinId)}
+                      >
+                        {r.gene}
+                      </button>
                     </td>
                     <td className="px-3 py-1.5 font-mono text-xs text-slate-700">
                       {r.proteinId}

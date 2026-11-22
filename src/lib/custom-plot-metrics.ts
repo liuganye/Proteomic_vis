@@ -94,8 +94,15 @@ export function defaultKeysForKind(kind: CustomPlotKind): {
 }
 
 export function autoTitle(
-  spec: Pick<UserCustomPlotSpec, "kind" | "xKey" | "yKey" | "valueKey">,
+  spec: Pick<
+    UserCustomPlotSpec,
+    "kind" | "xKey" | "yKey" | "valueKey" | "title" | "language"
+  >,
 ): string {
+  if (spec.kind === "script") {
+    if (spec.title?.trim()) return spec.title.trim();
+    return `Script · ${spec.language ?? "python"}`;
+  }
   if (spec.kind === "histogram" && spec.valueKey) {
     return `Histogram · ${metricLabel(spec.valueKey)}`;
   }
