@@ -20,7 +20,25 @@ export type QcUserPlotId = `user-${string}`;
 export type QcPlotId = QcConventionalPlotId | QcCustomPlotId | QcUserPlotId;
 
 /** Chart types available in the Custom plots builder. */
-export type CustomPlotKind = "scatter" | "bar" | "histogram";
+export type CustomPlotKind = "scatter" | "bar" | "histogram" | "script";
+
+/** Script languages for Script / Advanced custom plots. */
+export type ScriptPlotLanguage = "python" | "js";
+
+/** Recharts-ready chart payload returned by script runs. */
+export type ChartSpecType = "bar" | "scatter" | "histogram" | "line";
+
+export interface ChartSpec {
+  type: ChartSpecType;
+  title?: string;
+  data: Array<Record<string, string | number | null>>;
+  xKey: string;
+  yKey: string;
+  /** Optional series / color grouping field in each data row. */
+  seriesKey?: string;
+  xLabel?: string;
+  yLabel?: string;
+}
 
 /**
  * Sample-level metrics / columns available for custom QC plots
@@ -49,6 +67,12 @@ export interface UserCustomPlotSpec {
   valueKey?: SampleMetricKey;
   /** Optional color / group encoding (typically annotation group). */
   colorBy?: "group" | "none";
+  /** Script / Advanced mode fields */
+  language?: ScriptPlotLanguage;
+  source?: string;
+  inputs?: Record<string, string | number | boolean>;
+  /** Cached chart from last successful script run (session). */
+  chartSpec?: ChartSpec;
 }
 
 /** @deprecated Prefer QcPlotId; kept for nav compatibility */

@@ -55,6 +55,9 @@ Upload those files via the Data input panel (the browser cannot read host paths 
 #### Custom plots
 
 1. **Median vs missingness** — scatter of median log₁₀ MaxLFQ vs % missing per sample, colored by all annotation groups
+2. **Simple builder** — session Scatter / Bar / Histogram over sample metrics
+3. **Script / Advanced** — Python (primary) or JS snippets over the same sample-metric rows via `POST /api/custom-plot`; returns a Recharts-ready `chartSpec`. AI agents inject plots with the `proteomics:register-custom-plot` event (see `docs/custom-plot-script-api.md`).
+4. **QC protein scope** — filter conventional + custom/script plots by Downstream-visible features (GO aspect/term from the demo map, gene symbol, protein probability, default DE call) and/or by proteins selected in Downstream (volcano / results / GO).
 
 ### Downstream
 

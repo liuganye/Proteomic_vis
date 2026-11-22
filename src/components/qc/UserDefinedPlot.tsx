@@ -24,6 +24,7 @@ import {
   conditionColor,
 } from "@/lib/stats";
 import type { FragPipeDataset, UserCustomPlotSpec } from "@/lib/types";
+import { ChartSpecView } from "./ChartSpecView";
 
 function buildHistogram(values: number[], bins = 20) {
   if (values.length === 0) return [];
@@ -78,11 +79,15 @@ export function UserDefinedPlot({
         <div>
           <p className="text-xs font-semibold tracking-wide text-amber-800 uppercase">
             User custom plot · {spec.kind}
+            {spec.kind === "script" && spec.language
+              ? ` · ${spec.language}`
+              : ""}
           </p>
           <h3 className="text-lg font-semibold text-slate-900">{spec.title}</h3>
           <p className="text-sm text-slate-600">
-            Session-defined QC view over sample metrics
-            {colorByGroup ? ", colored by annotation group" : ""}.
+            {spec.kind === "script"
+              ? "Scripted QC view over sample metrics (session)."
+              : `Session-defined QC view over sample metrics${colorByGroup ? ", colored by annotation group" : ""}.`}
           </p>
         </div>
         <button
@@ -94,6 +99,20 @@ export function UserDefinedPlot({
           Remove
         </button>
       </header>
+
+      {spec.kind === "script" ? (
+        spec.chartSpec ? (
+          <ChartSpecView chartSpec={spec.chartSpec} />
+        ) : (
+          <p
+            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600"
+            role="status"
+          >
+            No chartSpec yet. Re-run the script from Script / Advanced, or have
+            an AI agent POST /api/custom-plot and register the result.
+          </p>
+        )
+      ) : null}
 
       {spec.kind === "scatter" && spec.xKey && spec.yKey ? (
         <ScatterView

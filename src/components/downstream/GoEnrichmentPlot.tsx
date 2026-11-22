@@ -14,6 +14,7 @@ import {
 import {
   enrichGoTerms,
   GO_ASPECT_LABELS,
+  resolveGoGene,
   type GoAspect,
   type GoDirectionFilter,
   type GoEnrichmentResult,
@@ -32,6 +33,7 @@ interface Props {
   canCompare: boolean;
   ready: boolean;
   groupsAvailable: number;
+  onSelectProteins?: (ids: string[]) => void;
 }
 
 type RankMode = "negLog10AdjP" | "enrichment";
@@ -42,6 +44,7 @@ export function GoEnrichmentPlot({
   canCompare,
   ready,
   groupsAvailable,
+  onSelectProteins,
 }: Props) {
   const [aspect, setAspect] = useState<GoAspect | "all">("BP");
   const [direction, setDirection] = useState<GoDirectionFilter>("significant");
@@ -58,6 +61,18 @@ export function GoEnrichmentPlot({
       down: points.filter((p) => p.direction === "down").length,
     };
   }, [points]);
+
+  const proteinIdsForHitGenes = (hitGenes: string[]) => {
+    const want = new Set(hitGenes.map((g) => g.toUpperCase()));
+    const ids: string[] = [];
+    for (const p of points) {
+      const resolved = resolveGoGene(p);
+      if (resolved.key && want.has(resolved.key.toUpperCase())) {
+        ids.push(p.proteinId);
+      }
+    }
+    return ids;
+  };
 
   useEffect(() => {
     if (!canCompare || !ready) {
@@ -329,7 +344,17 @@ export function GoEnrichmentPlot({
                     );
                   }}
                 />
-                <Bar dataKey="score" name={xLabel} radius={[0, 4, 4, 0]}>
+                <Bar
+                  dataKey="score"
+                  name={xLabel}
+                  radius={[0, 4, 4, 0]}
+                  cursor={onSelectProteins ? "pointer" : undefined}
+                  onClick={(data) => {
+                    const row = data as unknown as (typeof chartRows)[number];
+                    if (!row?.hitGenes || !onSelectProteins) return;
+                    onSelectProteins(proteinIdsForHitGenes(row.hitGenes));
+                  }}
+                >
                   {chartRows.map((row) => (
                     <Cell
                       key={row.id}
@@ -340,6 +365,10 @@ export function GoEnrichmentPlot({
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Click a GO bar to select its hit proteins for QC.
+          </p>
 
           <ul className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
             <li className="flex items-center gap-1.5">
