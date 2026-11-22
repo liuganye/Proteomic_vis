@@ -35,3 +35,7 @@ Thumbs.db
 
 # Downloaded structure models (PDB/AlphaFold) cached by the backend
 /.cache/
+
+# Large GO source dumps used only by scripts/build-go-bundle.py
+/data/external/cache/goa_human.gaf.gz
+/data/external/cache/go-basic.obo

@@ -152,13 +152,13 @@ export function GoEnrichmentPlot({
       </header>
 
       <p className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
-        <strong className="font-medium text-slate-800">Demo mapping:</strong>{" "}
-        enrichment runs client-side against a bundled gene→GO table (mock genes +
-        common pathway symbols), not a full UniProt/GOA database. Uploaded IDs
+        <strong className="font-medium text-slate-800">Bundled mapping:</strong>{" "}
+        enrichment runs client-side against a gene→GO table built from human GOA
+        for genes in the shipped FragPipe sample (plus curated mock/pathway
+        symbols) — pragmatic coverage, not a full UniProt/GOA dump. Uploaded IDs
         match the FragPipe <code className="rounded bg-white px-1">Gene</code>{" "}
-        column (case-insensitive; multi-gene cells split), then a compact
-        UniProt accession→gene alias list when Gene is missing or holds an
-        accession. Coverage is limited to the curated demo set — not a GOA dump.
+        column (case-insensitive; multi-gene cells split), then UniProt
+        accession→gene aliases when Gene is missing or holds an accession.
         Unmapped significant IDs are listed below the chart. Not a substitute for
         clusterProfiler / g:Profiler / DAVID.
       </p>
@@ -239,28 +239,34 @@ export function GoEnrichmentPlot({
             <>
               <p>
                 None of the {direction} proteins map to the bundled GO table for
-                this aspect.
+                this aspect
+                {result && result.annotatedBackground > 0
+                  ? ` (background still has ${result.annotatedBackground} annotated gene${result.annotatedBackground === 1 ? "" : "s"})`
+                  : ""}
+                .
               </p>
               <p className="mt-2 text-xs text-slate-500">
                 Unmapped {direction} IDs:{" "}
-                {result?.unmappedForeground.length ??
-                  sigCounts[
-                    direction === "significant" ? "significant" : direction
-                  ]}
+                <span className="font-medium text-slate-700">
+                  {result?.unmappedForeground.length ??
+                    sigCounts[
+                      direction === "significant" ? "significant" : direction
+                    ]}
+                </span>
                 {result ? (
                   <>
                     {" "}
                     · lookup column:{" "}
                     <span className="font-medium text-slate-700">
                       {result.idColumnUsed === "none"
-                        ? "none matched (tried Gene, then Protein ID)"
+                        ? "none matched (tried Gene, then Protein ID → UniProt alias)"
                         : result.idColumnUsed}
                     </span>
                   </>
                 ) : null}
-                . Try “All aspects”, ensure FragPipe Gene symbols overlap the
-                demo map, or upload Protein IDs covered by the compact UniProt
-                alias list.
+                . Try “All aspects”, relax volcano thresholds so more genes enter
+                the foreground, or confirm Gene / Protein ID values are human
+                symbols/accessions covered by the bundled map.
               </p>
               {result && result.unmappedForeground.length > 0 && (
                 <p className="mt-2 text-xs text-slate-500">
@@ -404,7 +410,10 @@ export function GoEnrichmentPlot({
 
           {result.unmappedForeground.length > 0 && (
             <p className="mt-3 text-xs text-slate-500">
-              Unmapped in significant set ({result.unmappedForeground.length}):{" "}
+              Unmapped for this aspect in the {direction} set (
+              {result.unmappedForeground.length}
+              ): non-human IDs, symbols outside the bundle, or genes lacking{" "}
+              {aspect === "all" ? "any" : aspect} terms —{" "}
               {result.unmappedForeground.slice(0, 24).join(", ")}
               {result.unmappedForeground.length > 24 ? "…" : ""}
             </p>

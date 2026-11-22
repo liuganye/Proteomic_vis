@@ -65,7 +65,7 @@ export interface GoEnrichmentOptions {
   ranking?: "negLog10AdjP" | "enrichment";
   /**
    * Optional override of gene→term map (uppercase keys).
-   * Defaults to the bundled demo mapping.
+   * Defaults to the bundled GO map (`go-bundle.json`).
    */
   geneTerms?: Record<string, string[]>;
   termCatalog?: GoTermDef[];
@@ -147,8 +147,8 @@ export interface GoGeneResolve {
 
 /**
  * Resolve a volcano / protein row to a GO mapping key.
- * Prefers Gene symbols that hit the term map; falls back to UniProt→gene aliases
- * when Gene is missing, sparse, or itself an accession.
+ * Prefers Gene symbols that hit the bundled term map; falls back to UniProt→gene
+ * aliases when Gene is missing, sparse, or itself an accession.
  */
 export function resolveGoGene(
   p: Pick<VolcanoPoint, "gene" | "proteinId">,
@@ -314,13 +314,14 @@ function summarizeIdColumn(
 }
 
 /**
- * Client-side GO enrichment against the bundled demo mapping (or overrides).
+ * Client-side GO enrichment against the bundled gene→GO map (or overrides).
  * Background = all proteins in `points` that resolve to at least one GO term.
  * Foreground = significant / up / down subset of that background.
  *
  * ID resolution: FragPipe `Gene` (case-insensitive, multi-gene split) first;
- * then compact UniProt accession → gene aliases when Gene is missing/sparse
- * or holds an accession. Not a full UniProt/GOA database.
+ * then UniProt accession → gene aliases (Homo sapiens sample-table coverage)
+ * when Gene is missing/sparse or holds an accession. Bundle covers ~99% of
+ * human genes in the shipped FragPipe table; not a full UniProt/GOA dump.
  */
 export function enrichGoTerms(
   points: VolcanoPoint[],

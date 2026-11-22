@@ -13,6 +13,11 @@ const require = createRequire(import.meta.url);
 async function loadGoEnrichment() {
   const dir = await mkdtemp(join(tmpdir(), "go-enrich-"));
   try {
+    const bundleRaw = await readFile(
+      new URL("../src/data/go-bundle.json", import.meta.url),
+      "utf8",
+    );
+    await writeFile(join(dir, "go-bundle.json"), bundleRaw);
     const files = [
       ["go-demo-mapping.ts", "../src/data/go-demo-mapping.ts"],
       ["go-uniprot-to-gene.ts", "../src/data/go-uniprot-to-gene.ts"],
@@ -25,6 +30,11 @@ async function loadGoEnrichment() {
         .replaceAll("@/data/go-demo-mapping", "./go-demo-mapping.ts")
         .replaceAll("@/data/go-uniprot-to-gene", "./go-uniprot-to-gene.ts")
         .replaceAll("@/lib/types", "./types.ts");
+      // JSON import → createRequire after transpile (node test runner has no JSON assert)
+      source = source.replace(
+        /import goBundle from ["']\.\/go-bundle\.json["'];?/g,
+        'import { createRequire as __createRequire } from "module";\nconst goBundle = __createRequire(import.meta.url)("./go-bundle.json");',
+      );
       const { outputText } = ts.transpileModule(source, {
         compilerOptions: {
           module: ts.ModuleKind.ESNext,
@@ -193,7 +203,7 @@ test("real-upload-shaped UniProt-only list still enriches", () => {
     point({ proteinId: "P04406", gene: "", significant: false, direction: "ns" }), // GAPDH
     point({ proteinId: "P07437", gene: "", significant: false, direction: "ns" }), // TUBB
     point({ proteinId: "P99999", gene: "", significant: true, direction: "up" }), // CYCS
-    point({ proteinId: "A0A0B4J2F0", gene: "", significant: true, direction: "up" }), // unmapped
+    point({ proteinId: "ZZNOTREAL0", gene: "", significant: true, direction: "up" }), // unmapped
     point({
       proteinId: "sp|P06733|ENOA_HUMAN",
       gene: "",
@@ -216,7 +226,7 @@ test("real-upload-shaped UniProt-only list still enriches", () => {
   assert.ok(result.terms.length > 0, "expected enriched terms for UniProt-only upload");
   assert.equal(result.idColumnUsed, "Protein ID");
   assert.ok(result.resolvedViaUniprot >= 3);
-  assert.ok(result.unmappedForeground.includes("A0A0B4J2F0"));
+  assert.ok(result.unmappedForeground.includes("ZZNOTREAL0"));
 });
 
 test("accession held in Gene column reports idColumnUsed Gene", () => {
@@ -301,16 +311,103 @@ test("real-upload-shaped mixed Gene + UniProt produces chart metadata", () => {
   assert.ok(result.unmappedForeground.includes("NOTAGOGENE"));
 });
 
-test("empty mapping UX fields when nothing overlaps demo map", () => {
+test("empty mapping UX fields when nothing overlaps GO map", () => {
   const points = [
-    point({ proteinId: "A0A0B4J2F0", gene: "PIGBOS1", significant: true }),
-    point({ proteinId: "A0A0J9YX57", gene: "MAGEB6B", significant: true }),
+    point({ proteinId: "ZZZZZZ", gene: "NOTAGOGENE", significant: true }),
+    point({ proteinId: "YYYYYY", gene: "ALSONOTAGO", significant: true }),
   ];
   const result = go.enrichGoTerms(points, { aspect: "all" });
   assert.equal(result.annotatedForeground, 0);
   assert.equal(result.terms.length, 0);
   assert.equal(result.idColumnUsed, "none");
   assert.ok(result.unmappedForeground.length >= 2);
+});
+
+test("real FragPipe-shaped human genes outside old demo set enrich", () => {
+  // These symbols appear in supplementary_files/combined_protein.tsv but were
+  // absent from the ~119-gene curated demo map (A2M, AAAS, …).
+  const foreground = ["A2M", "AAAS", "AARS1", "ABCE1", "ACLY", "ACTN1", "AHNAK"];
+  const background = [
+    ...foreground,
+    "GAPDH",
+    "ACTB",
+    "TUBB",
+    "VIM",
+    "ENO1",
+    "PKM",
+    "LDHA",
+  ];
+  const fg = new Set(foreground);
+  const points = background.map((gene) =>
+    point({
+      proteinId: gene,
+      gene,
+      significant: fg.has(gene),
+      direction: fg.has(gene) ? "up" : "ns",
+      log2fc: fg.has(gene) ? 2 : 0.1,
+      adjP: fg.has(gene) ? 1e-6 : 0.8,
+    }),
+  );
+
+  const result = go.enrichGoTerms(points, {
+    aspect: "all",
+    direction: "significant",
+    topN: 15,
+    minHits: 2,
+  });
+
+  assert.ok(
+    result.annotatedForeground >= 5,
+    `expected real-gene FG coverage, got ${result.annotatedForeground}`,
+  );
+  assert.ok(result.terms.length > 0, "expected enriched terms for real-shaped genes");
+  assert.equal(result.idColumnUsed, "Gene");
+  assert.ok(!result.unmappedForeground.includes("A2M"));
+});
+
+test("full significant-set style UniProt IDs from FragPipe human rows enrich", () => {
+  // Accessions from supplementary combined_protein.tsv (Homo sapiens).
+  const sigAcc = [
+    "P01023", // A2M
+    "Q9NRG9", // AAAS
+    "P49588", // AARS1
+    "P61221", // ABCE1
+    "P53396", // ACLY
+    "P12814", // ACTN1
+  ];
+  const bgAcc = [
+    ...sigAcc,
+    "P04406", // GAPDH
+    "P60709", // ACTB
+    "P07437", // TUBB
+    "P08670", // VIM
+  ];
+  const sig = new Set(sigAcc);
+  const points = bgAcc.map((proteinId) =>
+    point({
+      proteinId,
+      gene: "", // empty Gene → UniProt alias path
+      significant: sig.has(proteinId),
+      direction: sig.has(proteinId) ? "up" : "ns",
+      log2fc: sig.has(proteinId) ? 1.8 : 0.2,
+      adjP: sig.has(proteinId) ? 1e-5 : 0.7,
+    }),
+  );
+
+  const result = go.enrichGoTerms(points, {
+    aspect: "all",
+    direction: "significant",
+    topN: 15,
+    minHits: 2,
+  });
+
+  assert.ok(
+    result.annotatedForeground >= 4,
+    `expected UniProt FG coverage for real accessions, got ${result.annotatedForeground}`,
+  );
+  assert.ok(result.terms.length > 0);
+  assert.equal(result.idColumnUsed, "Protein ID");
+  assert.ok(result.resolvedViaUniprot >= 4);
 });
 
 void require;
