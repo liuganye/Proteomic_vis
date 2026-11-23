@@ -381,11 +381,87 @@ export function RealVolcanoPlot({
 
   const formatPCutoff = (value: number) => (value >= 0.001 ? Number(value.toPrecision(2)).toString() : value.toExponential(1));
 
-  const compactHud = plotW < 470 * hudScale;
-  const sidePillW = Math.round((compactHud ? 96 : 146) * hudScale);
-  const centerPillW = Math.round((compactHud ? 124 : 184) * hudScale);
+  const estimateHudTextWidth = (text: string, fontSize: number) => {
+    let units = 0;
+    for (const ch of text) {
+      if (ch === " ") units += 0.34;
+      else if (".,:·|!ilI".includes(ch)) units += 0.36;
+      else if ("←→".includes(ch)) units += 0.96;
+      else if (ch >= "A" && ch <= "Z") units += 0.74;
+      else units += 0.6;
+    }
+    return Math.ceil(units * fontSize);
+  };
+
+  const truncateGroup = (label: string, maxLen: number) =>
+    label.length > maxLen ? `${label.slice(0, Math.max(2, maxLen - 1))}…` : label;
+
+  const minPillGap = Math.max(6, Math.round(8 * hudScale));
   const pillH = Math.round(22 * hudScale);
   const pillY = Math.max(3, Math.round((top - pillH) / 2));
+
+  const buildHudLayout = (compact: boolean, fontSize: number) => {
+    const scale = fontSize / Math.max(1, hudFontSize);
+    const dotR = Math.max(2.6, 3.8 * hudScale * Math.min(1, scale + 0.08));
+    const padL = Math.max(7, Math.round(10 * hudScale * scale));
+    const padR = Math.max(8, Math.round(11 * hudScale * scale));
+    const dotGap = Math.max(5, Math.round(6 * hudScale * scale));
+    const dotLead = padL + dotR * 2 + dotGap;
+    const centerPadX = Math.max(10, Math.round(13 * hudScale * scale));
+
+    const leftLabel = compact
+      ? `← ${truncateGroup(groupBLabel, 8)}: ${counts.down}`
+      : `← ${truncateGroup(groupBLabel, 14)} higher: ${counts.down}`;
+    const centerLabel = compact
+      ? `${counts.total.toLocaleString()} · ${counts.passing} pass`
+      : `${counts.total.toLocaleString()} tested · ${counts.passing} pass`;
+    const rightLabel = compact
+      ? `${truncateGroup(groupALabel, 8)}: ${counts.up} →`
+      : `${truncateGroup(groupALabel, 14)} higher: ${counts.up} →`;
+
+    const leftW = Math.ceil(dotLead + estimateHudTextWidth(leftLabel, fontSize) + padR);
+    const centerW = Math.ceil(centerPadX * 2 + estimateHudTextWidth(centerLabel, fontSize));
+    const rightW = Math.ceil(dotLead + estimateHudTextWidth(rightLabel, fontSize) + padR);
+    const totalW = leftW + centerW + rightW + minPillGap * 2;
+    return {
+      fontSize,
+      dotR,
+      padL,
+      dotLead,
+      leftLabel,
+      centerLabel,
+      rightLabel,
+      leftW,
+      centerW,
+      rightW,
+      totalW,
+    };
+  };
+
+  let hudLayout = buildHudLayout(false, hudFontSize);
+  if (hudLayout.totalW > plotW) {
+    const gentleFont = Math.max(Math.round(9.5 * hudScale * 10) / 10, Math.floor((hudFontSize * (plotW / hudLayout.totalW)) * 10) / 10);
+    const gentleCandidate = buildHudLayout(false, gentleFont);
+    if (gentleCandidate.totalW <= plotW) {
+      hudLayout = gentleCandidate;
+    } else {
+      hudLayout = buildHudLayout(true, hudFontSize);
+      if (hudLayout.totalW > plotW) {
+        const fittedFont = Math.max(7.5, Math.floor((hudFontSize * (plotW / hudLayout.totalW)) * 10) / 10);
+        hudLayout = buildHudLayout(true, fittedFont);
+      }
+    }
+  }
+
+  const leftPillX = left;
+  const rightPillX = right - hudLayout.rightW;
+  const minCenterX = leftPillX + hudLayout.leftW + minPillGap;
+  const maxCenterX = rightPillX - minPillGap - hudLayout.centerW;
+  const idealCenterX = (left + right) / 2 - hudLayout.centerW / 2;
+  const centerPillX =
+    minCenterX <= maxCenterX
+      ? Math.max(minCenterX, Math.min(maxCenterX, idealCenterX))
+      : Math.round((minCenterX + maxCenterX) / 2);
 
   return <section id="real-volcano" className="group relative flex flex-1 min-h-0 min-w-0 flex-col scroll-mt-6">
     <div
@@ -594,14 +670,14 @@ export function RealVolcanoPlot({
         }}>
         <defs><clipPath id={clipId}><rect x={left} y={top} width={right - left} height={bottom - top} /></clipPath></defs>
         <g aria-label="Volcano HUD counts">
-          <rect x={left} y={pillY} width={sidePillW} height={pillH} rx={pillH / 2} fill="#fffbeb" stroke="#fcd34d" />
-          <circle cx={left + 12 * hudScale} cy={pillY + pillH / 2} r={4 * hudScale} fill="#b45309" />
-          <text x={left + 21 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} fontSize={hudFontSize} fontWeight="600" fill="#92400e">{compactHud ? `← ${groupBLabel.slice(0, 6)}: ${counts.down}` : `← ${groupBLabel} higher: ${counts.down}`}</text>
-          <rect x={(left + right) / 2 - centerPillW / 2} y={pillY} width={centerPillW} height={pillH} rx={pillH / 2} fill="#f8fafc" stroke="#cbd5e1" />
-          <text x={(left + right) / 2} y={pillY + pillH / 2 + hudFontSize * 0.36} textAnchor="middle" fontSize={hudFontSize} fontWeight="600" fill="#334155" data-testid="volcano-counts">{compactHud ? `${counts.total.toLocaleString()} · ${counts.passing} pass` : `${counts.total.toLocaleString()} tested · ${counts.passing} pass`}</text>
-          <rect x={right - sidePillW} y={pillY} width={sidePillW} height={pillH} rx={pillH / 2} fill="#f0fdfa" stroke="#99f6e4" />
-          <circle cx={right - sidePillW + 12 * hudScale} cy={pillY + pillH / 2} r={4 * hudScale} fill="#0f766e" />
-          <text x={right - 10 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} textAnchor="end" fontSize={hudFontSize} fontWeight="600" fill="#0f766e">{compactHud ? `${groupALabel.slice(0, 6)}: ${counts.up} →` : `${groupALabel} higher: ${counts.up} →`}</text>
+          <rect x={leftPillX} y={pillY} width={hudLayout.leftW} height={pillH} rx={pillH / 2} fill="#fffbeb" stroke="#fcd34d" />
+          <circle cx={leftPillX + hudLayout.padL + hudLayout.dotR} cy={pillY + pillH / 2} r={hudLayout.dotR} fill="#b45309" />
+          <text x={leftPillX + hudLayout.dotLead} y={pillY + pillH / 2 + hudLayout.fontSize * 0.36} fontSize={hudLayout.fontSize} fontWeight="600" fill="#92400e">{hudLayout.leftLabel}</text>
+          <rect x={centerPillX} y={pillY} width={hudLayout.centerW} height={pillH} rx={pillH / 2} fill="#f8fafc" stroke="#cbd5e1" />
+          <text x={centerPillX + hudLayout.centerW / 2} y={pillY + pillH / 2 + hudLayout.fontSize * 0.36} textAnchor="middle" fontSize={hudLayout.fontSize} fontWeight="600" fill="#334155" data-testid="volcano-counts">{hudLayout.centerLabel}</text>
+          <rect x={rightPillX} y={pillY} width={hudLayout.rightW} height={pillH} rx={pillH / 2} fill="#f0fdfa" stroke="#99f6e4" />
+          <circle cx={rightPillX + hudLayout.padL + hudLayout.dotR} cy={pillY + pillH / 2} r={hudLayout.dotR} fill="#0f766e" />
+          <text x={rightPillX + hudLayout.dotLead} y={pillY + pillH / 2 + hudLayout.fontSize * 0.36} fontSize={hudLayout.fontSize} fontWeight="600" fill="#0f766e">{hudLayout.rightLabel}</text>
         </g>
         {view.yTicks.map(value => <g key={value}>
           <line x1={left} x2={right} y1={y(value)} y2={y(value)} stroke="#e2e8f0" />
