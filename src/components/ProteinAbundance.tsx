@@ -31,8 +31,10 @@ function quantile(sorted: number[], q: number): number {
   return sorted[base + 1] !== undefined ? sorted[base] + rest * (sorted[base + 1] - sorted[base]) : sorted[base];
 }
 
-export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }: {
+export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples, proteinLabel, proteinId }: {
   abundance: { points: AbundancePoint[] };
+  proteinLabel?: string;
+  proteinId?: string;
 } & SampleSelectionProps) {
   const groups = abundanceGroups(abundance.points);
   const domain = useMemo(
@@ -193,38 +195,66 @@ export function ProteinAbundance({ abundance, selectedSamples, onSelectSamples }
 
   const selectedCallouts: { id: string; px: number; py: number; text: string }[] = [];
 
-  return <section className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden" aria-labelledby="abundance-heading">
+  return <section className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden px-2.5 pt-1 pb-1.5" aria-labelledby="abundance-heading">
     <h3 id="abundance-heading" className="sr-only">Observed abundance by sample</h3>
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs" data-testid="abundance-selected-samples" aria-live="polite">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-semibold text-slate-700">QC selected samples:</span>
-        {!selectedSamples.length ? <span className="text-slate-500">None</span> : <>
-          {selectedSamples.map(id => {
-            const point = abundance.points.find(p => p.sample_id === id);
-            const status = !point ? "not in response" : isObserved(point.log2_intensity) ? formatIntensity(point.log2_intensity) : "missing";
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onSelectSamples(selectedSamples.filter(s => s !== id))}
-                title={`Deselect ${id}`}
-                className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 font-medium text-orange-950 hover:bg-orange-100"
-              >
-                <span>{id}: {point && isObserved(point.log2_intensity) ? <strong>{status}</strong> : <em className="text-amber-800">{status}</em>}</span>
-                <span aria-hidden="true" className="text-orange-700">×</span>
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => onSelectSamples([])}
-            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50"
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-slate-100 pb-2 text-xs" data-testid="abundance-selected-samples" aria-live="polite">
+      <div className="flex flex-wrap items-center gap-2">
+        {proteinLabel && (
+          <span className="inline-flex items-baseline gap-1.5 rounded bg-slate-100 px-2 py-0.5">
+            <strong className="text-slate-900">{proteinLabel}</strong>
+            {proteinId && proteinId !== proteinLabel && (
+              <span className="font-mono text-[11px] text-slate-500">{proteinId}</span>
+            )}
+          </span>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className="font-medium text-slate-500"
+            title="Samples highlighted here stay synced with the QC plots; click any dot to toggle"
           >
-            Clear
-          </button>
-        </>}
+            QC selected samples:
+          </span>
+          {!selectedSamples.length ? <span className="text-slate-400">click any dot</span> : <>
+            {selectedSamples.map(id => {
+              const point = abundance.points.find(p => p.sample_id === id);
+              const status = !point ? "not in response" : isObserved(point.log2_intensity) ? formatIntensity(point.log2_intensity) : "missing";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSelectSamples(selectedSamples.filter(s => s !== id))}
+                  title={`Deselect ${id}`}
+                  className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 font-medium text-orange-950 hover:bg-orange-100"
+                >
+                  <span>{id}: {point && isObserved(point.log2_intensity) ? <strong>{status}</strong> : <em className="text-amber-800">{status}</em>}</span>
+                  <span aria-hidden="true" className="text-orange-700">×</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onSelectSamples([])}
+              className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          </>}
+        </div>
       </div>
-      <span className="text-[11px] text-slate-500">log₂ MaxLFQ · median &amp; IQR</span>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500" aria-label="Chart legend">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-slate-500" />
+          Sample
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-[2px] border border-slate-400 bg-slate-200/80" />
+          IQR (25–75%)
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-0.5 w-3 bg-slate-900" />
+          Median
+        </span>
+      </div>
     </div>
     {activeDomain ? (
       <div

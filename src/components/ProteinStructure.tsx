@@ -63,7 +63,16 @@ function errorText(code: string, message: string): string {
 }
 
 /** Render with `key={proteinId}` so rotation, zoom, color and hover reset per protein. */
-export function ProteinStructure({ proteinId, references }: { proteinId: string; references: { pdb_id: string }[] }) {
+export function ProteinStructure({
+  proteinId,
+  references,
+  structureEndpoint,
+}: {
+  proteinId: string;
+  references: { pdb_id: string }[];
+  /** Optional Next.js proxy endpoint (e.g. "/api/protein-structure") for standalone/uploaded datasets. */
+  structureEndpoint?: string;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -94,22 +103,28 @@ export function ProteinStructure({ proteinId, references }: { proteinId: string;
     const controller = new AbortController();
     const fail = (code: string, message: string) => setLoad({ state: "error", key, code, message });
     (async () => {
-      const response = await fetch(`${API}/api/v1/proteins/${encodeURIComponent(proteinId)}/structure`, { signal: controller.signal });
+      const metaUrl = structureEndpoint
+        ? `${structureEndpoint}?id=${encodeURIComponent(proteinId)}`
+        : `${API}/api/v1/proteins/${encodeURIComponent(proteinId)}/structure`;
+      const response = await fetch(metaUrl, { signal: controller.signal });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         return fail(body.code ?? `http_${response.status}`, body.message ?? "");
       }
       const model = (await response.json()) as StructureModel;
-      const coordinates = await fetch(`${API}${model.coordinates_url}`, { signal: controller.signal });
+      const coordUrl = structureEndpoint
+        ? model.coordinates_url
+        : `${API}${model.coordinates_url}`;
+      const coordinates = await fetch(coordUrl, { signal: controller.signal });
       if (!coordinates.ok) return fail(`http_${coordinates.status}`, "Could not download the coordinates.");
       const parsed = parseCalpha(await coordinates.text(), model.chain_id);
       if (!parsed.residues.length) return fail("structure_chain_empty", "The downloaded model has no Cα atoms to draw.");
       setLoad({ state: "ready", key, model, chain: parsed.chain, residues: parsed.residues });
     })().catch(error => {
-      if (error?.name !== "AbortError") fail("network", "The structure request failed. Is the backend running?");
+      if (error?.name !== "AbortError") fail("network", "The structure request failed. Check the connection and try again.");
     });
     return () => controller.abort();
-  }, [proteinId, key]);
+  }, [proteinId, key, structureEndpoint]);
 
   const current = load.key === key ? load : { state: "loading" as const, key };
   const ready = current.state === "ready" ? current : null;

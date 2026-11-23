@@ -5,16 +5,26 @@ import type {
   QcConclusion,
   VolcanoPoint,
 } from "./types";
-import { CHART } from "./chart-palette";
 
-/** Distinct hues for arbitrary annotation groups — single source: chart-palette. */
-const CONDITION_PALETTE = [...CHART.hex.series];
+/** Distinct hues for arbitrary annotation groups (Human/QC keep familiar colors). */
+const CONDITION_PALETTE = [
+  "#0f766e", // teal
+  "#b45309", // amber
+  "#1d4ed8", // blue
+  "#be185d", // pink
+  "#7c3aed", // violet
+  "#047857", // green
+  "#c2410c", // orange
+  "#0e7490", // cyan
+  "#a16207", // yellow-brown
+  "#475569", // slate
+];
 
 const PREFERRED_CONDITION_COLORS: Record<string, string> = {
-  "group a": CHART.hex.up,
-  "group b": CHART.hex.down,
-  human: CHART.hex.up,
-  qc: CHART.hex.down,
+  "group a": "#0f766e",
+  "group b": "#b45309",
+  human: "#0f766e",
+  qc: "#b45309",
 };
 
 /** Stable color map for every condition/group label present. */
@@ -27,7 +37,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
     seen.add(g);
     unique.push(g);
   }
-  const map: Record<string, string> = { Unknown: CHART.hex.ns };
+  const map: Record<string, string> = { Unknown: "#64748b" };
   let paletteIdx = 0;
   for (const g of unique) {
     const preferred = PREFERRED_CONDITION_COLORS[g.toLowerCase()];
@@ -43,7 +53,7 @@ export function buildConditionColorMap(conditions: string[]): Record<string, str
       paletteIdx += 1;
     }
     map[g] =
-      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? CHART.hex.ns;
+      CONDITION_PALETTE[paletteIdx % CONDITION_PALETTE.length] ?? "#64748b";
     paletteIdx += 1;
   }
   return map;
@@ -54,7 +64,7 @@ export function conditionColor(
   colorMap: Record<string, string>,
 ): string {
   const g = (condition ?? "").trim() || "Unknown";
-  return colorMap[g] ?? colorMap.Unknown ?? CHART.hex.ns;
+  return colorMap[g] ?? colorMap.Unknown ?? "#64748b";
 }
 
 /** Order samples by condition (annotation order), then sample name. */
@@ -503,10 +513,112 @@ function meanOrZero(vals: number[]): number {
   return vals.reduce((x, y) => x + y, 0) / vals.length;
 }
 
+function logGamma(z: number): number {
+  const coeffs = [
+    76.18009172947146,
+    -86.50532032941677,
+    24.01409824083091,
+    -1.231739572450155,
+    0.1208650973866179e-2,
+    -0.5395239384953e-5,
+  ];
+  const x = z;
+  let y = z;
+  let tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let j = 0; j < coeffs.length; j++) {
+    y += 1;
+    ser += coeffs[j] / y;
+  }
+  return -tmp + Math.log((2.5066282746310005 * ser) / x);
+}
+
+function betacf(a: number, b: number, x: number): number {
+  const MAXIT = 200;
+  const EPS = 3e-7;
+  const FPMIN = 1e-30;
+  const qab = a + b;
+  const qap = a + 1;
+  const qam = a - 1;
+  let c = 1;
+  let d = 1 - (qab * x) / qap;
+  if (Math.abs(d) < FPMIN) d = FPMIN;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= MAXIT; m++) {
+    const m2 = 2 * m;
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c;
+    if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    h *= d * c;
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c;
+    if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < EPS) break;
+  }
+  return h;
+}
+
+function regularizedIncompleteBeta(a: number, b: number, x: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(
+    logGamma(a + b) -
+      logGamma(a) -
+      logGamma(b) +
+      a * Math.log(x) +
+      b * Math.log(1 - x),
+  );
+  if (x < (a + 1) / (a + b + 2)) {
+    return (bt * betacf(a, b, x)) / a;
+  }
+  return 1 - (bt * betacf(b, a, 1 - x)) / b;
+}
+
+function studentTTwoTailedP(tAbs: number, df: number): number {
+  if (!Number.isFinite(tAbs) || !Number.isFinite(df) || df <= 0) return 1;
+  if (tAbs === 0) return 1;
+  const x = df / (df + tAbs * tAbs);
+  return Math.max(1e-12, Math.min(1, regularizedIncompleteBeta(df / 2, 0.5, x)));
+}
+
+/** Deterministic normal(0, 1) draw keyed by (proteinId, sample) for reproducible left-shifted imputation. */
+function seededNormal(seedStr: string): number {
+  let h1 = 2166136261 >>> 0;
+  let h2 = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    const ch = seedStr.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 16777619) >>> 0;
+    h2 = Math.imul(h2 ^ (ch + 31), 2246822519) >>> 0;
+  }
+  const u1 = Math.max(1e-7, (h1 % 1000000) / 1000000);
+  const u2 = (h2 % 1000000) / 1000000;
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+function sampleMean(vals: number[]): number {
+  return vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+
+function sampleVariance(vals: number[], mean: number): number {
+  if (vals.length < 2) return 0;
+  let ss = 0;
+  for (const v of vals) ss += (v - mean) * (v - mean);
+  return ss / (vals.length - 1);
+}
+
 /**
- * Approximate DE for any two annotation groups from MaxLFQ group means
- * (demo only when limma adj-p columns are absent for that contrast).
- * Proteins detected in only one group are kept (missing group mean = 0).
+ * Two-sample Welch's t-test with Perseus-style left-shifted log2 imputation
+ * and Benjamini–Hochberg FDR when precomputed limma columns are absent.
  */
 export function approximateGroupContrast(
   dataset: FragPipeDataset,
@@ -521,35 +633,127 @@ export function approximateGroupContrast(
 
   const fcThr = opts?.log2fcThreshold ?? 1;
   const pThr = opts?.adjPThreshold ?? 0.05;
-  const points: VolcanoPoint[] = [];
+
+  // Fallback for single-replicate groups where variance is undefined.
+  if (aSamples.length < 2 || bSamples.length < 2) {
+    const points: VolcanoPoint[] = [];
+    for (const p of dataset.proteins) {
+      const aVals = aSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
+      const bVals = bSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
+      if (aVals.length === 0 && bVals.length === 0) continue;
+      const log2fc = Math.log2((meanOrZero(aVals) + 1) / (meanOrZero(bVals) + 1));
+      const t = Math.abs(log2fc) / 0.4;
+      const adjP = Math.min(1, Math.max(1e-12, Math.exp(-0.5 * t * t)));
+      const significant = Math.abs(log2fc) >= fcThr && adjP <= pThr;
+      points.push({
+        proteinId: p.proteinId,
+        gene: p.gene || p.proteinId,
+        log2fc,
+        adjP,
+        negLog10AdjP: -Math.log10(adjP),
+        significant,
+        direction: !significant ? "ns" : log2fc > 0 ? "up" : "down",
+        proteinProbability: p.proteinProbability,
+      });
+    }
+    return {
+      contrast: `${groupA}_vs_${groupB} (approx from MaxLFQ)`,
+      points,
+    };
+  }
+
+  // Global log2 MaxLFQ mean & SD across selected groups for Perseus-style left-shifted imputation.
+  const allLog2: number[] = [];
+  const selectedSamples = [...aSamples, ...bSamples];
   for (const p of dataset.proteins) {
-    const aVals = aSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
-    const bVals = bSamples.map((s) => p.maxlfq[s] ?? 0).filter((v) => v > 0);
-    // Keep proteins observed in at least one of the two groups.
-    if (aVals.length === 0 && bVals.length === 0) continue;
-    const aMean = meanOrZero(aVals);
-    const bMean = meanOrZero(bVals);
-    const log2fc = Math.log2((aMean + 1) / (bMean + 1));
-    const t = Math.abs(log2fc) / 0.4;
-    // Deterministic pseudo-p from effect size (demo only; not a real DE test)
-    const adjP = Math.min(
-      1,
-      Math.max(1e-12, Math.exp(-0.5 * t * t)),
-    );
-    const significant = Math.abs(log2fc) >= fcThr && adjP <= pThr;
-    points.push({
+    for (const s of selectedSamples) {
+      const v = p.maxlfq[s] ?? 0;
+      if (v > 0 && Number.isFinite(v)) allLog2.push(Math.log2(v));
+    }
+  }
+  if (allLog2.length < 2) {
+    return { contrast: `${groupA}_vs_${groupB} (Welch t-test)`, points: [] };
+  }
+  const gMean = sampleMean(allLog2);
+  const gSd = Math.max(0.5, Math.sqrt(sampleVariance(allLog2, gMean)));
+  const impMean = gMean - 1.8 * gSd;
+  const impSd = gSd * 0.3;
+
+  const rawRows: {
+    proteinId: string;
+    gene: string;
+    log2fc: number;
+    pValue: number;
+    proteinProbability?: number | null;
+  }[] = [];
+
+  for (const p of dataset.proteins) {
+    const obsA = aSamples.reduce((n, s) => n + ((p.maxlfq[s] ?? 0) > 0 ? 1 : 0), 0);
+    const obsB = bSamples.reduce((n, s) => n + ((p.maxlfq[s] ?? 0) > 0 ? 1 : 0), 0);
+    // Require ≥2 observed replicates in at least one group to avoid single-hit noise.
+    if (obsA < 2 && obsB < 2) continue;
+
+    const aLog = aSamples.map((s) => {
+      const v = p.maxlfq[s] ?? 0;
+      return v > 0 ? Math.log2(v) : impMean + seededNormal(`${p.proteinId}|${s}`) * impSd;
+    });
+    const bLog = bSamples.map((s) => {
+      const v = p.maxlfq[s] ?? 0;
+      return v > 0 ? Math.log2(v) : impMean + seededNormal(`${p.proteinId}|${s}`) * impSd;
+    });
+
+    const mA = sampleMean(aLog);
+    const mB = sampleMean(bLog);
+    // Small variance floor (0.04 ≈ SD 0.2) acts like mild empirical-Bayes shrinkage on tiny n=3 replicates.
+    const vA = Math.max(0.04, sampleVariance(aLog, mA));
+    const vB = Math.max(0.04, sampleVariance(bLog, mB));
+    const nA = aLog.length;
+    const nB = bLog.length;
+    const se2 = vA / nA + vB / nB;
+    const log2fc = mA - mB;
+    const tAbs = Math.abs(log2fc) / Math.sqrt(se2);
+    const df =
+      (se2 * se2) /
+      ((vA / nA) ** 2 / (nA - 1) + (vB / nB) ** 2 / (nB - 1));
+    const pValue = studentTTwoTailedP(tAbs, df);
+
+    rawRows.push({
       proteinId: p.proteinId,
       gene: p.gene || p.proteinId,
       log2fc,
-      adjP,
-      negLog10AdjP: -Math.log10(adjP),
-      significant,
-      direction: !significant ? "ns" : log2fc > 0 ? "up" : "down",
+      pValue,
       proteinProbability: p.proteinProbability,
     });
   }
+
+  // Benjamini–Hochberg FDR adjustment.
+  const m = rawRows.length;
+  const order = rawRows.map((_, i) => i).sort((i, j) => rawRows[i].pValue - rawRows[j].pValue);
+  const adjPs = new Array<number>(m);
+  let minRunning = 1;
+  for (let rank = m; rank >= 1; rank--) {
+    const idx = order[rank - 1];
+    minRunning = Math.min(minRunning, (rawRows[idx].pValue * m) / rank);
+    adjPs[idx] = Math.max(1e-12, Math.min(1, minRunning));
+  }
+
+  const points: VolcanoPoint[] = rawRows.map((row, i) => {
+    const adjP = adjPs[i];
+    const significant = Math.abs(row.log2fc) >= fcThr && adjP <= pThr;
+    return {
+      proteinId: row.proteinId,
+      gene: row.gene,
+      log2fc: row.log2fc,
+      adjP,
+      negLog10AdjP: -Math.log10(adjP),
+      significant,
+      direction: !significant ? "ns" : row.log2fc > 0 ? "up" : "down",
+      proteinProbability: row.proteinProbability,
+    };
+  });
+
   return {
-    contrast: `${groupA}_vs_${groupB} (approx from MaxLFQ)`,
+    contrast: `${groupA}_vs_${groupB} (Welch t-test)`,
     points,
   };
 }

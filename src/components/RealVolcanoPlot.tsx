@@ -18,12 +18,15 @@ import {
 } from "@/lib/visualization";
 import type { WorkspaceModuleId } from "@/lib/workspace-layout";
 import { VolcanoBrushInputs } from "./VolcanoBrushInputs";
-import { VOLCANO_COLORS } from "@/lib/chart-palette";
 
 type Point = { protein_id: string; gene: string | null; organism?: string; log2_fc: number; p_value?: number; adj_p: number };
 type AbundancePoint = { sample_id: string; display_group: string; log2_intensity: number | null };
 
-const DIRECTION_COLORS = VOLCANO_COLORS;
+const DIRECTION_COLORS = {
+  up: "#0f766e",
+  down: "#b45309",
+  ns: "#94a3b8",
+} as const;
 
 export function RealVolcanoPlot({
   points,
@@ -44,6 +47,8 @@ export function RealVolcanoPlot({
   selectedSamples,
   focusedAbundance,
   onOpenPanel,
+  groupALabel = "Human",
+  groupBLabel = "QC",
 }: {
   points: Point[];
   focus: string;
@@ -63,6 +68,8 @@ export function RealVolcanoPlot({
   selectedSamples?: string[];
   focusedAbundance?: AbundancePoint[] | null;
   onOpenPanel?: (id: WorkspaceModuleId) => void;
+  groupALabel?: string;
+  groupBLabel?: string;
 }) {
   const { xMax: fullXMax, yMax: fullYMax, xTicks: fullXTicks, yTicks: fullYTicks } = useMemo(
     () => volcanoAxes(points, pCutoff, fcCutoff),
@@ -314,7 +321,7 @@ export function RealVolcanoPlot({
   const tick = (value: number) => Math.abs(value) >= 10000 ? value.toExponential(0) : Number(value.toPrecision(4)).toString();
   const pointTitle = (p: Point) => {
     const dir = volcanoDirection(p, pCutoff, fcCutoff);
-    const dirLabel = dir === "up" ? "Higher in Human" : dir === "down" ? "Higher in QC" : "Does not pass";
+    const dirLabel = dir === "up" ? `Higher in ${groupALabel}` : dir === "down" ? `Higher in ${groupBLabel}` : "Does not pass";
     return `${p.gene || p.protein_id} (${p.protein_id})${p.organism ? ` · ${p.organism}` : ""} · log₂FC ${p.log2_fc.toFixed(2)} · adj p ${p.adj_p.toExponential(2)} · ${dirLabel}`;
   };
   const bounds = preview ?? brush;
@@ -455,7 +462,7 @@ export function RealVolcanoPlot({
       className="relative flex-1 min-h-[210px] w-full overflow-visible"
       tabIndex={0}
       role="region"
-      aria-label="Human minus QC volcano chart."
+      aria-label={`${groupALabel} minus ${groupBLabel} volcano chart.`}
     >
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
@@ -477,7 +484,7 @@ export function RealVolcanoPlot({
         }}
         role="group"
         tabIndex={0}
-        aria-label="Volcano plot of Human minus QC with numeric axes and current threshold lines. Select a point or draw a selection in Box select mode."
+        aria-label={`Volcano plot of ${groupALabel} minus ${groupBLabel} with numeric axes and current threshold lines. Select a point or draw a selection in Box select mode.`}
         onPointerDown={e => {
           if (e.button !== 0) return;
           const point = pointerPosition(e);
@@ -589,12 +596,12 @@ export function RealVolcanoPlot({
         <g aria-label="Volcano HUD counts">
           <rect x={left} y={pillY} width={sidePillW} height={pillH} rx={pillH / 2} fill="#fffbeb" stroke="#fcd34d" />
           <circle cx={left + 12 * hudScale} cy={pillY + pillH / 2} r={4 * hudScale} fill="#b45309" />
-          <text x={left + 21 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} fontSize={hudFontSize} fontWeight="600" fill="#92400e">{compactHud ? `← QC: ${counts.down}` : `← QC higher: ${counts.down}`}</text>
+          <text x={left + 21 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} fontSize={hudFontSize} fontWeight="600" fill="#92400e">{compactHud ? `← ${groupBLabel.slice(0, 6)}: ${counts.down}` : `← ${groupBLabel} higher: ${counts.down}`}</text>
           <rect x={(left + right) / 2 - centerPillW / 2} y={pillY} width={centerPillW} height={pillH} rx={pillH / 2} fill="#f8fafc" stroke="#cbd5e1" />
           <text x={(left + right) / 2} y={pillY + pillH / 2 + hudFontSize * 0.36} textAnchor="middle" fontSize={hudFontSize} fontWeight="600" fill="#334155" data-testid="volcano-counts">{compactHud ? `${counts.total.toLocaleString()} · ${counts.passing} pass` : `${counts.total.toLocaleString()} tested · ${counts.passing} pass`}</text>
           <rect x={right - sidePillW} y={pillY} width={sidePillW} height={pillH} rx={pillH / 2} fill="#f0fdfa" stroke="#99f6e4" />
           <circle cx={right - sidePillW + 12 * hudScale} cy={pillY + pillH / 2} r={4 * hudScale} fill="#0f766e" />
-          <text x={right - 10 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} textAnchor="end" fontSize={hudFontSize} fontWeight="600" fill="#0f766e">{compactHud ? `Hum: ${counts.up} →` : `Human higher: ${counts.up} →`}</text>
+          <text x={right - 10 * hudScale} y={pillY + pillH / 2 + hudFontSize * 0.36} textAnchor="end" fontSize={hudFontSize} fontWeight="600" fill="#0f766e">{compactHud ? `${groupALabel.slice(0, 6)}: ${counts.up} →` : `${groupALabel} higher: ${counts.up} →`}</text>
         </g>
         {view.yTicks.map(value => <g key={value}>
           <line x1={left} x2={right} y1={y(value)} y2={y(value)} stroke="#e2e8f0" />
@@ -873,7 +880,7 @@ export function RealVolcanoPlot({
         </g>
         <line x1={left} x2={right} y1={bottom} y2={bottom} stroke="#64748b" />
         <line x1={left} x2={left} y1={top} y2={bottom} stroke="#64748b" />
-        <text x={(left + right) / 2} y={svgH - Math.round(8 * uiScale)} textAnchor="middle" fontSize={axisTitleSize} fill="#334155">log₂ fold change (Human − QC)</text>
+        <text x={(left + right) / 2} y={svgH - Math.round(8 * uiScale)} textAnchor="middle" fontSize={axisTitleSize} fill="#334155">log₂ fold change ({groupALabel} − {groupBLabel})</text>
         <text transform={`translate(${Math.round(15 * uiScale)} ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" fontSize={axisTitleSize} fill="#334155">−log₁₀ adjusted p</text>
       </svg>
       {wheelView && (
@@ -948,7 +955,7 @@ export function RealVolcanoPlot({
               )}
             </>;
           })() : <>
-            <span>{focus} · Not tested in Human − QC</span>
+            <span>{focus} · Not tested in {groupALabel} − {groupBLabel}</span>
             {focusLocalPdb && onOpenPanel && (
               <button type="button" onClick={() => onOpenPanel("structure")} className="rounded border border-teal-700 bg-white px-1.5 py-0.5 text-[10.5px] font-medium text-teal-900 hover:bg-teal-50">
                 3D:{focusLocalPdb}

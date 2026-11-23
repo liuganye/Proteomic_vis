@@ -16,9 +16,9 @@ function valid(layout) {
 test('moving into occupied space flows collisions down while keeping the edited position',()=>{
   const before=structuredClone(DEFAULT_LAYOUT);
   const moved=placePanel(before,{...before[0],x:6,y:0});
-  assert.deepEqual(moved.find(p=>p.id==='volcano'),{id:'volcano',x:6,y:0,w:4,h:6});
-  assert.equal(moved.find(p=>p.id==='results').y,6);
-  assert.equal(moved.find(p=>p.id==='abundance').y,6);
+  assert.deepEqual(moved.find(p=>p.id==='volcano'),{id:'volcano',x:6,y:0,w:6,h:9});
+  assert.equal(moved.find(p=>p.id==='results').y,9);
+  assert.equal(moved.find(p=>p.id==='abundance').y,18);
   assert.deepEqual(before,DEFAULT_LAYOUT);
   assert.deepEqual(moved.map(p=>p.id),before.map(p=>p.id));
   valid(moved);
@@ -40,7 +40,7 @@ test('duplicate add is a no-op and removed panels can return without discarding 
   const reduced=DEFAULT_LAYOUT.filter(p=>p.id!=='results');
   const restored=addPanel(reduced,'results');
   for(const p of reduced) assert.deepEqual(restored.find(q=>q.id===p.id),p);
-  assert.equal(restored.find(p=>p.id==='results').x,4);
+  assert.equal(restored.find(p=>p.id==='results').x,6);
   assert.equal(restored.find(p=>p.id==='results').y,0);
   valid(restored);
 });
@@ -50,7 +50,7 @@ test('storage accepts intentionally empty layouts but rejects corrupt, overlappi
 });
 test('minimum sizes, whole grid units and edge clamping are enforced',()=>{
   const result=placePanel([],{id:'volcano',x:11.6,y:-4,w:2,h:1})[0];
-  assert.deepEqual(result,{id:'volcano',x:9,y:0,w:3,h:4});
+  assert.deepEqual(result,{id:'volcano',x:8,y:0,w:4,h:6});
   const wide=placePanel([],{id:'network',x:10,y:2.4,w:30,h:40})[0];
   assert.deepEqual(wide,{id:'network',x:0,y:2,w:12,h:20});
 });

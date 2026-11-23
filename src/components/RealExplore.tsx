@@ -23,7 +23,8 @@ import { ProteinAbundance } from "./ProteinAbundance";
 import { ProteinStructure } from "./ProteinStructure";
 import { ProteinPicker } from "./ProteinPicker";
 import { ProteinFocusControls } from "./ProteinFocusControls";
-import type { SampleSelectionProps } from "@/lib/types";
+import { GoEnrichmentPlot } from "./downstream/GoEnrichmentPlot";
+import type { SampleSelectionProps, VolcanoPoint } from "@/lib/types";
 
 const API = process.env.NEXT_PUBLIC_PROTEIN_API ?? "http://127.0.0.1:8000";
 type Protein = { protein_id: string; gene: string | null; organism: string; description: string };
@@ -66,6 +67,29 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
   const [focusHistory, setFocusHistory] = useState<string[]>([focus]);
   const [sharedHoverId, setSharedHoverId] = useState<string | null>(null);
   const rows = useMemo(() => filterRealResults(points, analysis), [points, analysis]);
+  const goPoints = useMemo<VolcanoPoint[]>(() => {
+    const brush = analysis.brush;
+    return points.map((p) => {
+      const sig = brush
+        ? inVolcanoBrush(p, brush)
+        : passesVolcanoFilters(p, pCutoff, fcCutoff);
+      const direction: VolcanoPoint["direction"] = sig ? (p.log2_fc >= 0 ? "up" : "down") : "ns";
+      const safeP = Number.isFinite(p.adj_p) && p.adj_p > 0 ? p.adj_p : 1e-300;
+      return {
+        proteinId: p.protein_id,
+        gene: p.gene ?? "",
+        log2fc: p.log2_fc,
+        adjP: p.adj_p,
+        negLog10AdjP: -Math.log10(safeP),
+        significant: sig,
+        direction,
+      };
+    });
+  }, [points, analysis.brush, pCutoff, fcCutoff]);
+  const brushedGoCount = useMemo(
+    () => (analysis.brush ? goPoints.filter((p) => p.significant).length : 0),
+    [analysis.brush, goPoints],
+  );
   const resultsById = useMemo(() => new Map(points.map(p => [p.protein_id, p])), [points]);
   const networkNeighborIds = useMemo(
     () => new Set((network?.nodes ?? []).filter(n => n.protein_id !== focus).map(n => n.protein_id)),
@@ -200,23 +224,34 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
       )}
     </section>),
     structure: detail ? <ProteinStructure key={detail.protein_id} proteinId={detail.protein_id} references={detail.structures}/> : evidenceState,
-    go: <section className="flex flex-1 min-h-0 flex-col justify-center gap-3 p-4" aria-labelledby="go-pending-heading">
-      <div className="flex items-center gap-2">
-        <span className="go-status">Not connected</span>
-        <h3 id="go-pending-heading" className="text-sm font-semibold text-slate-800">GO enrichment</h3>
+    go: (
+      <div className="flex-1 min-h-0 overflow-auto p-3">
+        {analysis.brush && (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs text-teal-900">
+            <span>
+              Enriching <strong>{brushedGoCount.toLocaleString()}</strong> proteins from volcano box selection (background {points.length.toLocaleString()}).
+            </span>
+            <button
+              type="button"
+              onClick={() => updateAnalysis({ brush: null, page: 0 })}
+              className="rounded border border-teal-300 bg-white px-2 py-0.5 font-medium text-teal-900 hover:bg-teal-100"
+            >
+              Clear box
+            </button>
+          </div>
+        )}
+        <GoEnrichmentPlot
+          points={goPoints}
+          contrastLabel={analysis.brush ? "Human vs QC (volcano box selection)" : "Human vs QC"}
+          canCompare={true}
+          ready={resultsStatus === "ready"}
+          groupsAvailable={2}
+          onSelectProteins={(ids) => {
+            if (ids.length > 0) choose(ids[0]);
+          }}
+        />
       </div>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-[11px] text-slate-500">Current candidates</div>
-          <div className="mt-0.5 text-lg font-bold tabular-nums text-teal-900">{resultsStatus === "ready" ? rows.length.toLocaleString() : "—"}</div>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
-          <span className="rounded bg-white px-1.5 py-0.5 border border-slate-200 font-medium">BP</span>
-          <span className="rounded bg-white px-1.5 py-0.5 border border-slate-200 font-medium">MF</span>
-          <span className="rounded bg-white px-1.5 py-0.5 border border-slate-200 font-medium">CC</span>
-        </div>
-      </div>
-    </section>,
+    ),
   };
   return <div>
     <AnalysisWorkspace reveal={reveal} context={(
@@ -245,7 +280,8 @@ export function RealExplore({ focus, setFocus, selectedSamples, onSelectSamples,
   </div>;
 }
 
-function NetworkGraph({
+export type NetworkGraphData = Network;
+export function NetworkGraph({
   network,
   focus,
   isUpdating,
@@ -263,6 +299,8 @@ function NetworkGraph({
   selectedSamples,
   focusedAbundance,
   onOpenPanel,
+  groupALabel = "Human",
+  groupBLabel = "QC",
 }: {
   network: Network;
   focus: string;
@@ -281,6 +319,8 @@ function NetworkGraph({
   selectedSamples?: string[];
   focusedAbundance?: { sample_id: string; display_group: string; log2_intensity: number | null }[] | null;
   onOpenPanel?: (id: WorkspaceModuleId) => void;
+  groupALabel?: string;
+  groupBLabel?: string;
 }) {
   const [viewport, setViewport] = useState({ zoom: 1, pan: { x: 0, y: 0 } });
   const { zoom, pan } = viewport;
@@ -494,10 +534,10 @@ function NetworkGraph({
   for (const p of positions.values()) {
     if (p.radius > maxUsedRadius) maxUsedRadius = p.radius;
   }
-  const maxSpread = Math.max(170, maxUsedRadius + 30);
+  const maxSpread = Math.max(215, maxUsedRadius + 30);
   const ringScale = Math.max(0.32, Math.min((netW - 60) / (maxSpread * 2), (netH - 64) / (maxSpread * 2)));
-  const nodeScale = Math.max(0.84, Math.min(1.65, ringScale * 1.15));
-  const fontScale = Math.max(1, Math.min(1.35, ringScale * 1.12));
+  const nodeScale = Math.max(0.38, Math.min(1.25, ringScale * 0.92));
+  const fontScale = Math.max(0.62, Math.min(1.18, ringScale * 0.96));
   const netCx = netW / 2;
   const netCy = netH / 2;
 
@@ -1141,11 +1181,11 @@ function NetworkGraph({
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded-full border-[1.5px] border-teal-700 bg-teal-100" />
-              ↑ Human ({summary.up})
+              ↑ {groupALabel} ({summary.up})
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded-full border-[1.5px] border-amber-700 bg-amber-100" />
-              ↑ QC ({summary.down})
+              ↑ {groupBLabel} ({summary.down})
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded-full border-[1.5px] border-slate-500 bg-slate-50" />

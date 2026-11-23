@@ -28,11 +28,9 @@ type BuilderMode = "simple" | "script";
 export function CustomPlotBuilder({
   onAdd,
   sampleRows,
-  compact = false,
 }: {
   onAdd: (spec: UserCustomPlotSpec) => void;
   sampleRows: SampleMetricRow[];
-  compact?: boolean;
 }) {
   const [mode, setMode] = useState<BuilderMode>("simple");
   const [kind, setKind] = useState<Exclude<CustomPlotKind, "script">>("scatter");
@@ -99,19 +97,17 @@ export function CustomPlotBuilder({
   };
 
   return (
-    <div className={compact ? "p-0" : "rounded-xl border border-dashed border-amber-300/90 bg-amber-50/40 p-4 sm:p-5"}>
+    <div className="rounded-xl border border-dashed border-amber-300/90 bg-amber-50/40 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-slate-900">
             Add a custom plot
           </h3>
-          {!compact && (
-            <p className="mt-1 text-sm text-slate-600">
-              Simple builder for Scatter / Bar / Histogram, or Script / Advanced
-              for Python (and JS) snippets. Specs stay in this session until you
-              remove them or clear data.
-            </p>
-          )}
+          <p className="mt-1 text-sm text-slate-600">
+            Simple builder for Scatter / Bar / Histogram, or Script / Advanced
+            for Python (and JS) snippets. Specs stay in this session until you
+            remove them or clear data.
+          </p>
         </div>
       </div>
 
