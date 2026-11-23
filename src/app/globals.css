@@ -148,6 +148,11 @@ code {
   gap: 10px;
   align-items: stretch;
 }
+/* QC: fixed 2×2 window — four plots at a time; paging handles the rest */
+.plot-multiples--qc-2x2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
 .plot-multiples__cell {
   min-width: 0;
   min-height: 0;
@@ -164,12 +169,21 @@ code {
   outline: none;
   transition: box-shadow .15s, border-color .15s;
 }
+.plot-multiples--qc-2x2 .plot-multiples__cell {
+  /* Two rows fill one panel without cramming nine cells */
+  max-height: min(42vh, 420px);
+}
 .plot-multiples__cell--builder {
   max-height: min(42vh, 420px);
   grid-column: span 2;
 }
+.plot-multiples--qc-2x2 .plot-multiples__cell--builder {
+  grid-column: span 1;
+  max-height: min(42vh, 420px);
+}
 @media (max-width: 1100px) {
   .plot-multiples__cell--builder { grid-column: span 2; }
+  .plot-multiples--qc-2x2 .plot-multiples__cell--builder { grid-column: span 1; }
 }
 @media (max-width: 640px) {
   .plot-multiples__cell--builder { grid-column: span 1; }
@@ -181,15 +195,64 @@ code {
 }
 .plot-multiples__cell--custom { border-color: #e2c9a8; }
 .plot-multiples .chart-frame { height: 9.5rem !important; min-height: 9.5rem; }
+.plot-multiples--qc-2x2 .chart-frame { height: 14rem !important; min-height: 14rem; }
 .plot-multiples h3 { font-size: 12.5px !important; line-height: 1.3; }
+.plot-multiples--qc-2x2 h3 { font-size: 13.5px !important; }
 .downstream-page-main .plot-multiples__cell { max-height: min(38vh, 360px); }
+.qc-multiples-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--chart-muted);
+}
+.qc-multiples-pager button {
+  border: 1px solid var(--portal-border);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  background: rgb(255 255 255 / 90%);
+  color: #334155;
+  font-size: 12px;
+}
+.qc-multiples-pager button:hover:not(:disabled) {
+  background: var(--chart-accent-soft);
+  border-color: var(--chart-accent);
+  color: var(--chart-accent-deep);
+}
+.qc-multiples-pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.qc-multiples-pager__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.qc-multiples-pager__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  border: 0;
+  padding: 0;
+  background: var(--portal-border);
+  cursor: pointer;
+}
+.qc-multiples-pager__dot[aria-current="true"] {
+  background: var(--chart-accent);
+  width: 18px;
+}
 @media (max-width: 1100px) {
   .plot-multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .plot-multiples__cell { max-height: min(34vh, 320px); }
+  .plot-multiples--qc-2x2 .plot-multiples__cell { max-height: min(40vh, 380px); }
 }
 @media (max-width: 640px) {
   .plot-multiples { grid-template-columns: 1fr; }
+  .plot-multiples--qc-2x2 { grid-template-columns: 1fr; }
   .plot-multiples__cell { max-height: none; }
+  .plot-multiples--qc-2x2 .plot-multiples__cell { max-height: none; }
 }
 .workspace-page-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .workspace-page-heading h1 { font-size: 22px; line-height: 1.25; font-weight: 650; letter-spacing: -.02em; color: #172e36; }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -46,9 +47,34 @@ const BUILTIN_PLOT_ANCHOR: Record<
   "median-vs-missing": "qc-plot-median-vs-missing",
 };
 
+/** Fixed window size for the QC 2×2 panel (never cram more than four cells). */
+const QC_PAGE_SIZE = 4;
+/** Conventional cells before the custom-builder (missingness…group-summary). */
+const BUILTIN_CELL_COUNT = 6;
+
 function plotAnchor(plotId: QcPlotId): string {
   if (plotId.startsWith("user-")) return userPlotAnchorId(plotId);
   return BUILTIN_PLOT_ANCHOR[plotId as keyof typeof BUILTIN_PLOT_ANCHOR];
+}
+
+/**
+ * Flat index in the paged QC cell list.
+ * Order: 6 conventional → custom builder → user plots → empty slots.
+ */
+function plotCellIndex(plotId: QcPlotId, userPlotIds: string[]): number {
+  const conventional: Record<string, number> = {
+    missingness: 0,
+    intensity: 1,
+    correlation: 3,
+    "median-vs-missing": 4,
+  };
+  if (plotId in conventional) return conventional[plotId];
+  if (plotId.startsWith("user-")) {
+    const userIndex = userPlotIds.indexOf(plotId);
+    if (userIndex < 0) return -1;
+    return BUILTIN_CELL_COUNT + 1 + userIndex;
+  }
+  return -1;
 }
 
 export function QcPanel({
@@ -106,26 +132,71 @@ export function QcPanel({
   );
   const [highlight, setHighlight] = useState<QcPlotId | null>(null);
   const [plotsReady, setPlotsReady] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pendingJumpId, setPendingJumpId] = useState<QcPlotId | null>(null);
+
   useEffect(() => {
     setPlotsReady(false);
     const id = window.requestAnimationFrame(() => setPlotsReady(true));
     return () => window.cancelAnimationFrame(id);
   }, [scopedDataset]);
 
-  const jumpToPlot = useCallback((plotId: QcPlotId) => {
+  const emptySlotCount = Math.max(0, 2 - userCustomPlots.length);
+  const totalPlotCount =
+    BUILTIN_CELL_COUNT + 1 + userCustomPlots.length + emptySlotCount;
+  const pageCount = Math.max(1, Math.ceil(totalPlotCount / QC_PAGE_SIZE));
+  const userPlotIds = useMemo(
+    () => userCustomPlots.map((p) => p.id),
+    [userCustomPlots],
+  );
+
+  useEffect(() => {
+    setPageIndex((p) => Math.min(p, pageCount - 1));
+  }, [pageCount]);
+
+  const plotPageIndex = useCallback(
+    (plotId: QcPlotId): number => {
+      const index = plotCellIndex(plotId, userPlotIds);
+      if (index < 0) return 0;
+      return Math.floor(index / QC_PAGE_SIZE);
+    },
+    [userPlotIds],
+  );
+
+  const highlightPlot = useCallback((plotId: QcPlotId) => {
     const id = plotAnchor(plotId);
     const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      setHighlight(plotId);
-      window.setTimeout(() => {
-        setHighlight((cur) => (cur === plotId ? null : cur));
-      }, 2200);
-      if (typeof el.focus === "function") {
-        el.focus({ preventScroll: true });
-      }
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    setHighlight(plotId);
+    window.setTimeout(() => {
+      setHighlight((cur) => (cur === plotId ? null : cur));
+    }, 2200);
+    if (typeof el.focus === "function") {
+      el.focus({ preventScroll: true });
     }
   }, []);
+
+  const jumpToPlot = useCallback(
+    (plotId: QcPlotId) => {
+      const targetPage = plotPageIndex(plotId);
+      if (targetPage !== pageIndex) {
+        setPageIndex(targetPage);
+        setPendingJumpId(plotId);
+        return;
+      }
+      highlightPlot(plotId);
+    },
+    [highlightPlot, pageIndex, plotPageIndex],
+  );
+
+  useEffect(() => {
+    if (!pendingJumpId || !plotsReady) return;
+    const id = pendingJumpId;
+    setPendingJumpId(null);
+    const raf = window.requestAnimationFrame(() => highlightPlot(id));
+    return () => window.cancelAnimationFrame(raf);
+  }, [pendingJumpId, plotsReady, pageIndex, highlightPlot]);
 
   useEffect(() => {
     if (focusPlotId && focusToken > 0 && plotsReady) jumpToPlot(focusPlotId);
@@ -138,6 +209,198 @@ export function QcPanel({
       ),
     [bundle.boxes],
   );
+
+  const allCells = useMemo(() => {
+    const cells: { key: string; node: ReactNode }[] = [
+      {
+        key: "missingness",
+        node: (
+          <PlotCell
+            anchorId={BUILTIN_PLOT_ANCHOR.missingness}
+            highlighted={highlight === "missingness"}
+          >
+            <MissingnessPlot
+              dataset={scopedDataset}
+              rows={bundle.miss}
+              colorMap={bundle.colorMap}
+              selectedSamples={selectedSamples}
+              onSelectSamples={onSelectSamples}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "intensity",
+        node: (
+          <PlotCell
+            anchorId={BUILTIN_PLOT_ANCHOR.intensity}
+            highlighted={highlight === "intensity"}
+          >
+            <IntensityDistribution
+              dataset={scopedDataset}
+              boxes={bundle.boxes}
+              groups={bundle.groups}
+              colorMap={bundle.colorMap}
+              selectedSamples={selectedSamples}
+              onSelectSamples={onSelectSamples}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "intensity-boxes",
+        node: (
+          <PlotCell anchorId="qc-plot-intensity-boxes" highlighted={false}>
+            <SampleIntensitySummary
+              boxes={bundle.boxes}
+              domain={boxDomain}
+              colorMap={bundle.colorMap}
+              selectedSamples={selectedSamples}
+              onSelectSamples={onSelectSamples}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "correlation",
+        node: (
+          <PlotCell
+            anchorId={BUILTIN_PLOT_ANCHOR.correlation}
+            highlighted={highlight === "correlation"}
+          >
+            <SampleCorrelation
+              dataset={scopedDataset}
+              matrix={bundle.correlation}
+              colorMap={bundle.colorMap}
+              selectedSamples={selectedSamples}
+              onSelectSamples={onSelectSamples}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "median-vs-missing",
+        node: (
+          <PlotCell
+            anchorId={BUILTIN_PLOT_ANCHOR["median-vs-missing"]}
+            highlighted={highlight === "median-vs-missing"}
+            tone="custom"
+          >
+            <MedianVsMissingness
+              dataset={scopedDataset}
+              rows={bundle.scatter}
+              colorMap={bundle.colorMap}
+              selectedSamples={selectedSamples}
+              onSelectSamples={onSelectSamples}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "group-summary",
+        node: (
+          <PlotCell anchorId="qc-plot-group-summary" highlighted={false}>
+            <GroupIntensityTable
+              groups={bundle.groups}
+              colorMap={bundle.colorMap}
+            />
+          </PlotCell>
+        ),
+      },
+      {
+        key: "custom-builder",
+        node: (
+          <PlotCell
+            anchorId="qc-plot-custom-builder"
+            highlighted={false}
+            tone="custom"
+            className="plot-multiples__cell--builder"
+          >
+            <CustomPlotBuilder
+              onAdd={onAddUserPlot}
+              sampleRows={sampleMetricRows}
+              compact
+            />
+          </PlotCell>
+        ),
+      },
+    ];
+
+    for (const spec of userCustomPlots) {
+      cells.push({
+        key: spec.id,
+        node: (
+          <PlotCell
+            anchorId={userPlotAnchorId(spec.id)}
+            highlighted={highlight === spec.id}
+            tone="custom"
+          >
+            <UserDefinedPlot
+              dataset={scopedDataset}
+              spec={spec}
+              rows={sampleMetricRows}
+              colorMap={bundle.colorMap}
+              onRemove={onRemoveUserPlot}
+              onUpdate={onUpdateUserPlot}
+              compact
+            />
+          </PlotCell>
+        ),
+      });
+    }
+
+    for (let i = 0; i < emptySlotCount; i++) {
+      cells.push({
+        key: `slot-${i}`,
+        node: (
+          <PlotCell
+            anchorId={`qc-plot-slot-${i}`}
+            highlighted={false}
+            tone="custom"
+          >
+            <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-1 px-3 text-center text-xs text-[color:var(--chart-muted)]">
+              <strong className="text-sm text-slate-700">
+                Custom plot slot
+              </strong>
+              <span>
+                Build a chart or script plot — it lands here in the grid.
+              </span>
+            </div>
+          </PlotCell>
+        ),
+      });
+    }
+
+    return cells;
+  }, [
+    boxDomain,
+    bundle.boxes,
+    bundle.colorMap,
+    bundle.correlation,
+    bundle.groups,
+    bundle.miss,
+    bundle.scatter,
+    emptySlotCount,
+    highlight,
+    onAddUserPlot,
+    onRemoveUserPlot,
+    onSelectSamples,
+    onUpdateUserPlot,
+    sampleMetricRows,
+    scopedDataset,
+    selectedSamples,
+    userCustomPlots,
+  ]);
+
+  const pageStart = pageIndex * QC_PAGE_SIZE;
+  const visibleCells = allCells.slice(pageStart, pageStart + QC_PAGE_SIZE);
+  const rangeStart = totalPlotCount === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + QC_PAGE_SIZE, totalPlotCount);
 
   return (
     <div className="space-y-4">
@@ -202,140 +465,65 @@ export function QcPanel({
               id="qc-multiples-heading"
               className="font-serif text-lg text-slate-900"
             >
-              QC small multiples
+              QC plot grid
             </h2>
             <p className="text-xs text-[color:var(--chart-muted)]">
-              ~9 views on one screen · 3×3 on desktop, stacks on narrow
+              2×2 in one window · page for more views
             </p>
           </div>
 
-          <div className="plot-multiples" data-testid="qc-plot-multiples">
-            <PlotCell
-              anchorId={BUILTIN_PLOT_ANCHOR.missingness}
-              highlighted={highlight === "missingness"}
+          {pageCount > 1 ? (
+            <div
+              className="qc-multiples-pager"
+              role="navigation"
+              aria-label="QC plot pages"
             >
-              <MissingnessPlot
-                dataset={scopedDataset}
-                rows={bundle.miss}
-                colorMap={bundle.colorMap}
-                selectedSamples={selectedSamples}
-                onSelectSamples={onSelectSamples}
-                compact
-              />
-            </PlotCell>
-
-            <PlotCell
-              anchorId={BUILTIN_PLOT_ANCHOR.intensity}
-              highlighted={highlight === "intensity"}
-            >
-              <IntensityDistribution
-                dataset={scopedDataset}
-                boxes={bundle.boxes}
-                groups={bundle.groups}
-                colorMap={bundle.colorMap}
-                selectedSamples={selectedSamples}
-                onSelectSamples={onSelectSamples}
-                compact
-              />
-            </PlotCell>
-
-            <PlotCell anchorId="qc-plot-intensity-boxes" highlighted={false}>
-              <SampleIntensitySummary
-                boxes={bundle.boxes}
-                domain={boxDomain}
-                colorMap={bundle.colorMap}
-                selectedSamples={selectedSamples}
-                onSelectSamples={onSelectSamples}
-                compact
-              />
-            </PlotCell>
-
-            <PlotCell
-              anchorId={BUILTIN_PLOT_ANCHOR.correlation}
-              highlighted={highlight === "correlation"}
-            >
-              <SampleCorrelation
-                dataset={scopedDataset}
-                matrix={bundle.correlation}
-                colorMap={bundle.colorMap}
-                selectedSamples={selectedSamples}
-                onSelectSamples={onSelectSamples}
-                compact
-              />
-            </PlotCell>
-
-            <PlotCell
-              anchorId={BUILTIN_PLOT_ANCHOR["median-vs-missing"]}
-              highlighted={highlight === "median-vs-missing"}
-              tone="custom"
-            >
-              <MedianVsMissingness
-                dataset={scopedDataset}
-                rows={bundle.scatter}
-                colorMap={bundle.colorMap}
-                selectedSamples={selectedSamples}
-                onSelectSamples={onSelectSamples}
-                compact
-              />
-            </PlotCell>
-
-            <PlotCell anchorId="qc-plot-group-summary" highlighted={false}>
-              <GroupIntensityTable
-                groups={bundle.groups}
-                colorMap={bundle.colorMap}
-              />
-            </PlotCell>
-
-            <PlotCell
-              anchorId="qc-plot-custom-builder"
-              highlighted={false}
-              tone="custom"
-              className="plot-multiples__cell--builder"
-            >
-              <CustomPlotBuilder
-                onAdd={onAddUserPlot}
-                sampleRows={sampleMetricRows}
-                compact
-              />
-            </PlotCell>
-
-            {userCustomPlots.map((spec) => (
-              <PlotCell
-                key={spec.id}
-                anchorId={userPlotAnchorId(spec.id)}
-                highlighted={highlight === spec.id}
-                tone="custom"
+              <span data-testid="qc-grid-page-label" aria-live="polite">
+                Showing {rangeStart}–{rangeEnd} of {totalPlotCount}
+              </span>
+              <button
+                type="button"
+                data-testid="qc-grid-prev"
+                onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+                disabled={pageIndex === 0}
               >
-                <UserDefinedPlot
-                  dataset={scopedDataset}
-                  spec={spec}
-                  rows={sampleMetricRows}
-                  colorMap={bundle.colorMap}
-                  onRemove={onRemoveUserPlot}
-                  onUpdate={onUpdateUserPlot}
-                  compact
-                />
-              </PlotCell>
-            ))}
+                Previous
+              </button>
+              <div className="qc-multiples-pager__dots">
+                {Array.from({ length: pageCount }, (_, i) => (
+                  <button
+                    key={`page-${i}`}
+                    type="button"
+                    className="qc-multiples-pager__dot"
+                    aria-label={`Page ${i + 1}`}
+                    aria-current={i === pageIndex ? "true" : undefined}
+                    data-testid={`qc-grid-page-${i}`}
+                    onClick={() => setPageIndex(i)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                data-testid="qc-grid-next"
+                onClick={() =>
+                  setPageIndex((p) => Math.min(pageCount - 1, p + 1))
+                }
+                disabled={pageIndex >= pageCount - 1}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
 
-            {userCustomPlots.length < 2 &&
-              Array.from({ length: 2 - userCustomPlots.length }).map((_, i) => (
-                <PlotCell
-                  key={`slot-${i}`}
-                  anchorId={`qc-plot-slot-${i}`}
-                  highlighted={false}
-                  tone="custom"
-                >
-                  <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-1 px-3 text-center text-xs text-[color:var(--chart-muted)]">
-                    <strong className="text-sm text-slate-700">
-                      Custom plot slot
-                    </strong>
-                    <span>
-                      Build a chart or script plot — it lands here in the grid.
-                    </span>
-                  </div>
-                </PlotCell>
-              ))}
+          <div
+            className="plot-multiples plot-multiples--qc-2x2"
+            data-testid="qc-plot-multiples"
+            data-page={pageIndex}
+            data-page-count={pageCount}
+          >
+            {visibleCells.map((cell) => (
+              <Fragment key={cell.key}>{cell.node}</Fragment>
+            ))}
           </div>
         </section>
       )}
