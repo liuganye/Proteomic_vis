@@ -5,9 +5,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import {
+  BUILTIN_CELL_COUNT,
+  QC_PAGE_SIZE,
+  emptySlotCountForPage,
+  plotPageIndexFor,
+} from "@/lib/qc-grid-paging";
 import {
   buildSampleMetricRows,
   userPlotAnchorId,
@@ -47,34 +54,9 @@ const BUILTIN_PLOT_ANCHOR: Record<
   "median-vs-missing": "qc-plot-median-vs-missing",
 };
 
-/** Fixed window size for the QC 2×2 panel (never cram more than four cells). */
-const QC_PAGE_SIZE = 4;
-/** Conventional cells before the custom-builder (missingness…group-summary). */
-const BUILTIN_CELL_COUNT = 6;
-
 function plotAnchor(plotId: QcPlotId): string {
   if (plotId.startsWith("user-")) return userPlotAnchorId(plotId);
   return BUILTIN_PLOT_ANCHOR[plotId as keyof typeof BUILTIN_PLOT_ANCHOR];
-}
-
-/**
- * Flat index in the paged QC cell list.
- * Order: 6 conventional → custom builder → user plots → empty slots.
- */
-function plotCellIndex(plotId: QcPlotId, userPlotIds: string[]): number {
-  const conventional: Record<string, number> = {
-    missingness: 0,
-    intensity: 1,
-    correlation: 3,
-    "median-vs-missing": 4,
-  };
-  if (plotId in conventional) return conventional[plotId];
-  if (plotId.startsWith("user-")) {
-    const userIndex = userPlotIds.indexOf(plotId);
-    if (userIndex < 0) return -1;
-    return BUILTIN_CELL_COUNT + 1 + userIndex;
-  }
-  return -1;
 }
 
 export function QcPanel({
@@ -134,6 +116,8 @@ export function QcPanel({
   const [plotsReady, setPlotsReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingJumpId, setPendingJumpId] = useState<QcPlotId | null>(null);
+  const pageIndexRef = useRef(pageIndex);
+  pageIndexRef.current = pageIndex;
 
   useEffect(() => {
     setPlotsReady(false);
@@ -141,7 +125,10 @@ export function QcPanel({
     return () => window.cancelAnimationFrame(id);
   }, [scopedDataset]);
 
-  const emptySlotCount = Math.max(0, 2 - userCustomPlots.length);
+  const emptySlotCount = emptySlotCountForPage(
+    BUILTIN_CELL_COUNT + 1 + userCustomPlots.length,
+    userCustomPlots.length,
+  );
   const totalPlotCount =
     BUILTIN_CELL_COUNT + 1 + userCustomPlots.length + emptySlotCount;
   const pageCount = Math.max(1, Math.ceil(totalPlotCount / QC_PAGE_SIZE));
@@ -153,15 +140,6 @@ export function QcPanel({
   useEffect(() => {
     setPageIndex((p) => Math.min(p, pageCount - 1));
   }, [pageCount]);
-
-  const plotPageIndex = useCallback(
-    (plotId: QcPlotId): number => {
-      const index = plotCellIndex(plotId, userPlotIds);
-      if (index < 0) return 0;
-      return Math.floor(index / QC_PAGE_SIZE);
-    },
-    [userPlotIds],
-  );
 
   const highlightPlot = useCallback((plotId: QcPlotId) => {
     const id = plotAnchor(plotId);
@@ -177,17 +155,19 @@ export function QcPanel({
     }
   }, []);
 
+  // pageIndex lives in a ref so this callback stays stable across paging —
+  // otherwise the focusToken effect would re-jump and snap the page back.
   const jumpToPlot = useCallback(
     (plotId: QcPlotId) => {
-      const targetPage = plotPageIndex(plotId);
-      if (targetPage !== pageIndex) {
+      const targetPage = plotPageIndexFor(plotId, userPlotIds);
+      if (targetPage !== pageIndexRef.current) {
         setPageIndex(targetPage);
         setPendingJumpId(plotId);
         return;
       }
       highlightPlot(plotId);
     },
-    [highlightPlot, pageIndex, plotPageIndex],
+    [highlightPlot, userPlotIds],
   );
 
   useEffect(() => {

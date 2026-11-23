@@ -8,7 +8,7 @@
     "build": "next build --webpack",
     "start": "next start -p 43147",
     "lint": "next lint",
-    "test": "node --test tests/visualization.test.mjs tests/go-enrichment.test.mjs tests/workspace-layout.test.mjs tests/abundance.test.mjs tests/structure.test.mjs tests/custom-plot-script.test.mjs tests/qc-protein-filter.test.mjs tests/custom-plot-security.test.mjs"
+    "test": "node --test tests/visualization.test.mjs tests/go-enrichment.test.mjs tests/workspace-layout.test.mjs tests/abundance.test.mjs tests/structure.test.mjs tests/custom-plot-script.test.mjs tests/qc-protein-filter.test.mjs tests/custom-plot-security.test.mjs tests/qc-grid-paging.test.mjs"
   },
   "dependencies": {
     "next": "^16.4.0",

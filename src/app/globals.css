@@ -231,16 +231,20 @@ code {
   gap: 4px;
 }
 .qc-multiples-pager__dot {
+  /* Visible 8px dot with ≥24px hit area */
+  box-sizing: content-box;
   width: 8px;
   height: 8px;
   border-radius: 9999px;
   border: 0;
-  padding: 0;
-  background: var(--portal-border);
+  padding: 8px;
+  margin: 0;
+  background-clip: content-box;
+  background-color: var(--portal-border);
   cursor: pointer;
 }
 .qc-multiples-pager__dot[aria-current="true"] {
-  background: var(--chart-accent);
+  background-color: var(--chart-accent);
   width: 18px;
 }
 @media (max-width: 1100px) {
