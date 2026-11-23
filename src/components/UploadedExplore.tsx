@@ -5,6 +5,7 @@ import { AnalysisWorkspace } from "./AnalysisWorkspace";
 import { RealVolcanoPlot } from "./RealVolcanoPlot";
 import { RealResultsTable } from "./RealResultsTable";
 import { ProteinAbundance } from "./ProteinAbundance";
+import { ProteinStructure } from "./ProteinStructure";
 import { GoEnrichmentPlot } from "./downstream/GoEnrichmentPlot";
 import { NetworkGraph, type NetworkGraphData } from "./RealExplore";
 import { annotationGroups, defaultGroupPair, volcanoForGroups } from "@/lib/stats";
@@ -551,28 +552,16 @@ export function UploadedExplore({
         )}
       </section>
     ),
-    structure: (
-      <div className="flex flex-1 min-h-0 flex-col justify-center gap-3 p-4 text-xs text-slate-600">
-        <p className="font-medium text-slate-800">
-          3D structure for <span className="text-teal-800">{displayGene}</span>{" "}
-          <span className="font-mono text-slate-500">({cleanAccession || "—"})</span>
-        </p>
-        <p className="leading-relaxed">
-          Local PDB structure files are bundled for the HYE benchmark. For uploaded proteins, view
-          the predicted 3D structure directly in AlphaFold DB:
-        </p>
-        {cleanAccession && (
-          <div>
-            <a
-              href={`https://alphafold.ebi.ac.uk/entry/${encodeURIComponent(cleanAccession)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded bg-teal-800 px-3 py-1.5 font-medium text-white hover:bg-teal-900"
-            >
-              Open {cleanAccession} in AlphaFold DB ↗
-            </a>
-          </div>
-        )}
+    structure: cleanAccession ? (
+      <ProteinStructure
+        key={cleanAccession}
+        proteinId={cleanAccession}
+        references={[]}
+        structureEndpoint="/api/protein-structure"
+      />
+    ) : (
+      <div className="flex flex-1 items-center justify-center p-4 text-sm text-slate-500">
+        Select a protein with a UniProt accession to view its 3D structure.
       </div>
     ),
   };

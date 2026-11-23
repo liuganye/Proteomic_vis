@@ -103,8 +103,8 @@ export function QcProteinFilterBar({
       </div>
 
       <p className="mt-2 text-xs text-slate-600">
-        Features come from Downstream-visible annotations (GO demo map, gene
-        symbols, protein probability, default volcano DE call).{" "}
+        Filter QC plots by GO annotation, gene symbol, protein probability, or
+        differential status.{" "}
         <span className="font-medium text-slate-800">
           Scope: {scopeLabel} · {scopedProteinCount.toLocaleString()} proteins
         </span>
@@ -132,8 +132,8 @@ export function QcProteinFilterBar({
           className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950"
           role="status"
         >
-          No proteins match the current QC filter / Downstream selection. Clear
-          the scope or pick another value — upload and mock paths are unchanged.
+          No proteins match the current QC filter or Downstream selection. Clear
+          the filter or choose another value.
         </p>
       ) : null}
     </div>
