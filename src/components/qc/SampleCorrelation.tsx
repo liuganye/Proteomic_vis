@@ -12,12 +12,10 @@ export function SampleCorrelation({
   colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
-  compact = false,
 }: {
   dataset: FragPipeDataset;
   matrix?: ReturnType<typeof sampleCorrelationMatrix>;
   colorMap?: Record<string, string>;
-  compact?: boolean;
 } & SampleSelectionProps) {
   const { samples, matrix, conditions } = precomputed ?? sampleCorrelationMatrix(dataset);
   const groups = useMemo(() => [...new Set(conditions)], [conditions]);
@@ -123,7 +121,7 @@ export function SampleCorrelation({
           <p className="mt-1 flex flex-wrap gap-x-5 gap-y-1"><span>Pearson r <strong className="tabular-nums text-slate-900">{Number.isFinite(inspected.r) ? inspected.r.toFixed(4) : "NA / undefined"}</strong></span><span><strong className="tabular-nums text-slate-900">{inspected.n.toLocaleString()}</strong> shared observed proteins</span></p>
         </> : <><p className="font-medium text-slate-800">Inspect a sample pair</p><p className="mt-1">Hover or focus a cell for its correlation and shared protein count. Click to select both samples.</p></>}
       </div>
-      <div className={`relative max-w-full overflow-auto rounded-lg border border-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 ${compact ? "max-h-[14rem]" : "max-h-[42rem]"}`} tabIndex={0} role="region" aria-label="Sample correlation matrix. Scroll within the matrix to inspect all samples.">
+      <div className="relative max-h-[42rem] max-w-full overflow-auto rounded-lg border border-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700" tabIndex={0} role="region" aria-label="Sample correlation matrix. Scroll within the matrix to inspect all samples.">
         <table className="border-separate border-spacing-0 text-xs">
           <caption className="sr-only">Sample–sample Pearson correlation of log10 MaxLFQ. Rows and columns identify samples.</caption>
           <thead>

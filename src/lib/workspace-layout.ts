@@ -1,29 +1,22 @@
 /** Layout is independent of analytical state: changing a panel never changes a filter. */
 export const GRID_COLUMNS = 12;
-/** Tighter rows so a 3×3 of panels fits a typical desktop viewport. */
-export const GRID_ROW = 48;
-export const GRID_GAP = 10;
+export const GRID_ROW = 64;
+export const GRID_GAP = 12;
 export const WORKSPACE_MODULES = [
-  { id: "volcano", title: "Volcano plot", description: "Select candidate proteins", group: "Candidates", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "results", title: "Results table", description: "Search and inspect candidates", group: "Candidates", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "go", title: "GO enrichment", description: "Functional themes", group: "Functional analysis", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "abundance", title: "Sample abundance", description: "Check the focused protein", group: "Protein evidence", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "details", title: "Protein details", description: "Identity, annotation and sequence", group: "Protein evidence", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "network", title: "STRING network", description: "Explore functional associations", group: "Protein evidence", w: 4, h: 6, minW: 3, minH: 4 },
-  { id: "structure", title: "Protein structure", description: "Best available experimental or predicted structure", group: "Protein evidence", w: 4, h: 6, minW: 3, minH: 4 },
+  { id: "volcano", title: "Volcano plot", description: "Select candidate proteins", group: "Candidates", w: 6, h: 9, minW: 4, minH: 6 },
+  { id: "results", title: "Results table", description: "Search and inspect candidates", group: "Candidates", w: 6, h: 9, minW: 4, minH: 6 },
+  { id: "abundance", title: "Sample abundance", description: "Check the focused protein", group: "Protein evidence", w: 12, h: 6, minW: 4, minH: 5 },
+  { id: "details", title: "Protein details", description: "Identity, annotation and sequence", group: "Protein evidence", w: 6, h: 7, minW: 4, minH: 4 },
+  { id: "network", title: "STRING network", description: "Explore functional associations", group: "Protein evidence", w: 6, h: 10, minW: 4, minH: 6 },
+  { id: "structure", title: "Protein structure", description: "Best available experimental or predicted structure", group: "Protein evidence", w: 6, h: 8, minW: 4, minH: 5 },
+  { id: "go", title: "GO enrichment", description: "Functional themes · BP / MF / CC", group: "Functional analysis", w: 6, h: 8, minW: 4, minH: 4 },
 ] as const;
 export type WorkspaceModuleId = typeof WORKSPACE_MODULES[number]["id"];
 export type PanelLayout = { id: WorkspaceModuleId; x: number; y: number; w: number; h: number };
-
-/** Default: seven key Downstream views as a simultaneous ~3×3 small-multiples grid. */
 export const DEFAULT_LAYOUT: PanelLayout[] = [
-  { id: "volcano", x: 0, y: 0, w: 4, h: 6 },
-  { id: "results", x: 4, y: 0, w: 4, h: 6 },
-  { id: "go", x: 8, y: 0, w: 4, h: 6 },
-  { id: "abundance", x: 0, y: 6, w: 4, h: 6 },
-  { id: "details", x: 4, y: 6, w: 4, h: 6 },
-  { id: "network", x: 8, y: 6, w: 4, h: 6 },
-  { id: "structure", x: 0, y: 12, w: 4, h: 6 },
+  { id: "volcano", x: 0, y: 0, w: 6, h: 9 },
+  { id: "results", x: 6, y: 0, w: 6, h: 9 },
+  { id: "abundance", x: 0, y: 9, w: 12, h: 6 },
 ];
 export const isModuleId = (id: unknown): id is WorkspaceModuleId => WORKSPACE_MODULES.some(m => m.id === id);
 export const panelDefinition = (id: WorkspaceModuleId) => WORKSPACE_MODULES.find(m => m.id === id)!;

@@ -85,24 +85,41 @@ export function useDataset() {
   );
 
   const loadReal = useCallback(async () => {
-    setState({ status: "loading", progress: "Loading real dataset from the backend…" });
+    setState({
+      status: "loading",
+      progress: "Loading real human CCND1 AP-MS sample dataset…",
+      progressFraction: 0.05,
+    });
     try {
-      const api = process.env.NEXT_PUBLIC_PROTEIN_API ?? "http://127.0.0.1:8000";
-      const response = await fetch(`${api}/api/v1/qc/matrix`);
-      if (!response.ok) throw new Error(`Backend request failed (${response.status})`);
-      const data: { samples: { sample_id: string; display_group: string; replicate_label: string }[]; proteins: { protein_id: string; gene: string | null; description: string; values: (number | null)[] }[] } = await response.json();
-      const samples = data.samples.map(s => s.sample_id);
-      if (!samples.length || data.proteins.some(p => p.values.length !== samples.length)) throw new Error("Invalid sample alignment in backend matrix");
-      const dataset: import("@/lib/types").FragPipeDataset = {
-        source: "real", samples, maxlfqColumns: samples, contrasts: [], proteinFileName: "Backend HYE dataset",
-        annotation: data.samples.map(s => ({ file: s.sample_id, sample: s.sample_id, condition: s.display_group, replicate: s.replicate_label })),
-        proteins: data.proteins.map(p => ({ proteinId: p.protein_id, gene: p.gene ?? "", description: p.description, proteinProbability: null, maxlfq: Object.fromEntries(samples.map((sample, i) => [sample, p.values[i] ?? 0])), log2fc: {}, adjP: {} })),
-      };
+      const [proteinRes, annotationRes] = await Promise.all([
+        fetch("/data/ccnd1-apms/combined_protein.tsv"),
+        fetch("/data/ccnd1-apms/experiment_annotation.tsv"),
+      ]);
+      if (!proteinRes.ok) {
+        throw new Error(`Failed to fetch combined_protein.tsv (${proteinRes.status})`);
+      }
+      const [proteinText, annotationText] = await Promise.all([
+        proteinRes.text(),
+        annotationRes.ok ? annotationRes.text() : Promise.resolve(null),
+      ]);
+      const dataset = await buildDatasetAsync(
+        {
+          proteinText,
+          annotationText,
+          source: "real",
+          proteinFileName: "CCND1 AP-MS (combined_protein.tsv)",
+          annotationFileName: annotationRes.ok ? "experiment_annotation.tsv" : undefined,
+        },
+        applyProgress,
+      );
       setState({ status: "ready", dataset });
     } catch (e) {
-      setState({ status: "error", error: `Could not load the real dataset. Check that the backend is running. ${e instanceof Error ? e.message : ""}` });
+      setState({
+        status: "error",
+        error: `Could not load the real sample dataset. ${e instanceof Error ? e.message : ""}`,
+      });
     }
-  }, []);
+  }, [applyProgress]);
 
   const clear = useCallback(() => setState({ status: "idle" }), []);
 

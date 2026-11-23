@@ -26,12 +26,10 @@ export function MedianVsMissingness({
   colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
-  compact = false,
 }: {
   dataset: FragPipeDataset;
   rows?: ScatterRow[];
   colorMap?: Record<string, string>;
-  compact?: boolean;
 } & SampleSelectionProps) {
   const data = rows ?? medianVsMissingness(dataset);
   const byCondition = useMemo(() => {
@@ -56,10 +54,10 @@ export function MedianVsMissingness({
           Sample overview · click dot
         </span>
       </header>
-      <div className={`${compact ? "chart-frame h-48" : "h-80"} w-full`}>
+      <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: compact ? 4 : 12 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
+          <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 12 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               type="number"
               dataKey="missingPct"

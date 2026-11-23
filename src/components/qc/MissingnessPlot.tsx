@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -27,13 +27,11 @@ export function MissingnessPlot({
   colorMap: colorMapProp,
   selectedSamples,
   onSelectSamples,
-  compact = false,
 }: {
   dataset: FragPipeDataset;
   /** Precomputed rows from computeQcBundle (avoids a second pass after upload). */
   rows?: MissRow[];
   colorMap?: Record<string, string>;
-  compact?: boolean;
 } & SampleSelectionProps) {
   const data = useMemo(
     () =>
@@ -60,6 +58,26 @@ export function MissingnessPlot({
     setThreshold(Math.round(Math.max(0, Math.min(100, raw))));
   }, []);
 
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      e.preventDefault();
+      updateThresholdFromClientY(e.clientY);
+    };
+    const onEnd = () => {
+      dragRectRef.current = null;
+      setDragging(false);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+  }, [dragging, updateThresholdFromClientY]);
+
   const handleLinePointerDown = useCallback(
     (e: React.PointerEvent<SVGGElement>) => {
       e.preventDefault();
@@ -69,29 +87,11 @@ export function MissingnessPlot({
       const rect = grid?.getBoundingClientRect();
       if (!rect || rect.height <= 0) return;
       dragRectRef.current = { bottom: rect.bottom, height: rect.height };
-      e.currentTarget.setPointerCapture(e.pointerId);
       setDragging(true);
       updateThresholdFromClientY(e.clientY);
     },
     [updateThresholdFromClientY],
   );
-
-  const handleLinePointerMove = useCallback(
-    (e: React.PointerEvent<SVGGElement>) => {
-      if (!dragRectRef.current) return;
-      updateThresholdFromClientY(e.clientY);
-    },
-    [updateThresholdFromClientY],
-  );
-
-  const handleLinePointerUp = useCallback((e: React.PointerEvent<SVGGElement>) => {
-    if (!dragRectRef.current) return;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    dragRectRef.current = null;
-    setDragging(false);
-  }, []);
 
   const groups = useMemo(() => {
     const seen = new Set<string>();
@@ -156,27 +156,27 @@ export function MissingnessPlot({
         </div>
       </div>
       <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Missingness by sample chart. Scroll horizontally to inspect all sample labels.">
-      <div className={`${compact ? "chart-frame h-48" : "h-80"} w-full`} style={{ minWidth: Math.max(compact ? 280 : 480, data.length * (compact ? 12 : 18) + 80) }}>
+      <div className="h-80 w-full" style={{ minWidth: Math.max(480, data.length * 18 + 80) }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: compact ? 8 : 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #d7e0e6)" />
+          <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="sample"
               angle={-55}
               textAnchor="end"
               interval={0}
-              tick={{ fontSize: compact ? 9 : 11 }}
-              height={compact ? 56 : 84}
+              tick={{ fontSize: 11 }}
+              height={84}
             />
             <YAxis
               unit="%"
               domain={[0, 100]}
-              tick={{ fontSize: compact ? 10 : 12 }}
-              label={compact ? undefined : {
+              tick={{ fontSize: 12 }}
+              label={{
                 value: "% missing",
                 angle: -90,
                 position: "insideLeft",
-                style: { fontSize: 12, fill: "var(--chart-muted, #5a6b76)" },
+                style: { fontSize: 12, fill: "#64748b" },
               }}
             />
             <Tooltip
@@ -242,9 +242,6 @@ export function MissingnessPlot({
                     aria-valuenow={threshold}
                     style={{ cursor: "ns-resize" }}
                     onPointerDown={handleLinePointerDown}
-                    onPointerMove={handleLinePointerMove}
-                    onPointerUp={handleLinePointerUp}
-                    onPointerCancel={handleLinePointerUp}
                   >
                     <title>Drag up or down to adjust missingness cutoff ({threshold}%)</title>
                     <rect x={vx} y={vy - 8} width={vw} height={16} fill="transparent" />

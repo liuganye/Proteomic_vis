@@ -671,7 +671,7 @@ function attachAnnotation(
   >,
   annotationText: string | null | undefined,
   meta: {
-    source: "mock" | "upload";
+    source: "mock" | "upload" | "real";
     proteinFileName?: string;
     annotationFileName?: string;
   },
@@ -694,7 +694,7 @@ function attachAnnotation(
 export function buildDataset(opts: {
   proteinText: string;
   annotationText?: string | null;
-  source: "mock" | "upload";
+  source: "mock" | "upload" | "real";
   proteinFileName?: string;
   annotationFileName?: string;
 }): FragPipeDataset {
@@ -706,7 +706,7 @@ export async function buildDatasetAsync(
   opts: {
     proteinText: string;
     annotationText?: string | null;
-    source: "mock" | "upload";
+    source: "mock" | "upload" | "real";
     proteinFileName?: string;
     annotationFileName?: string;
   },
